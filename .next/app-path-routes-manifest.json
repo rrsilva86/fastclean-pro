@@ -1,0 +1,18 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/api/address-search/route": "/api/address-search",
+  "/page": "/",
+  "/[locale]/page": "/[locale]",
+  "/[locale]/(auth)/login/page": "/[locale]/login",
+  "/[locale]/start/page": "/[locale]/start",
+  "/[locale]/(dashboard)/calendar/page": "/[locale]/calendar",
+  "/[locale]/(dashboard)/appointments/page": "/[locale]/appointments",
+  "/[locale]/(dashboard)/clients/page": "/[locale]/clients",
+  "/[locale]/(dashboard)/dashboard/page": "/[locale]/dashboard",
+  "/[locale]/(dashboard)/clients/[clientId]/page": "/[locale]/clients/[clientId]",
+  "/[locale]/(dashboard)/invoices/page": "/[locale]/invoices",
+  "/[locale]/(dashboard)/payroll/page": "/[locale]/payroll",
+  "/[locale]/(dashboard)/settings/page": "/[locale]/settings",
+  "/[locale]/(dashboard)/teams/page": "/[locale]/teams",
+  "/[locale]/(dashboard)/employees/page": "/[locale]/employees"
+}

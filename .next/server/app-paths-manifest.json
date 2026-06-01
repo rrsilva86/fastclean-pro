@@ -1,0 +1,18 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/address-search/route": "app/api/address-search/route.js",
+  "/page": "app/page.js",
+  "/[locale]/page": "app/[locale]/page.js",
+  "/[locale]/(auth)/login/page": "app/[locale]/(auth)/login/page.js",
+  "/[locale]/start/page": "app/[locale]/start/page.js",
+  "/[locale]/(dashboard)/calendar/page": "app/[locale]/(dashboard)/calendar/page.js",
+  "/[locale]/(dashboard)/appointments/page": "app/[locale]/(dashboard)/appointments/page.js",
+  "/[locale]/(dashboard)/clients/page": "app/[locale]/(dashboard)/clients/page.js",
+  "/[locale]/(dashboard)/dashboard/page": "app/[locale]/(dashboard)/dashboard/page.js",
+  "/[locale]/(dashboard)/clients/[clientId]/page": "app/[locale]/(dashboard)/clients/[clientId]/page.js",
+  "/[locale]/(dashboard)/invoices/page": "app/[locale]/(dashboard)/invoices/page.js",
+  "/[locale]/(dashboard)/payroll/page": "app/[locale]/(dashboard)/payroll/page.js",
+  "/[locale]/(dashboard)/settings/page": "app/[locale]/(dashboard)/settings/page.js",
+  "/[locale]/(dashboard)/teams/page": "app/[locale]/(dashboard)/teams/page.js",
+  "/[locale]/(dashboard)/employees/page": "app/[locale]/(dashboard)/employees/page.js"
+}
