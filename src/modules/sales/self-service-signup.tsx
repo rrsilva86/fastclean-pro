@@ -27,6 +27,8 @@ type SalesLabels = {
   cardNumber: string;
   expiration: string;
   cvc: string;
+  couponCode: string;
+  discountApplied: string;
   startTrial: string;
   secureCheckout: string;
   readyToday: string;
@@ -52,10 +54,16 @@ function setCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=2592000; SameSite=Lax`;
 }
 
+function readAccounts() {
+  return JSON.parse(window.localStorage.getItem("fastclean_platform_accounts") ?? "[]") as Array<Record<string, string | number | boolean>>;
+}
+
 export function SelfServiceSignup({ labels, locale }: { labels: SalesLabels; locale: string }) {
   const router = useRouter();
   const [selectedPlan, setSelectedPlan] = useState<PlanCode>("professional");
+  const [couponCode, setCouponCode] = useState("");
   const [error, setError] = useState("");
+  const hasFullDiscount = ["CORTESIA", "FAMILY100", "ESPOSA100"].includes(couponCode.trim().toUpperCase());
 
   function completePurchase(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -69,19 +77,32 @@ export function SelfServiceSignup({ labels, locale }: { labels: SalesLabels; loc
       return;
     }
 
-    setCookie("fastclean_session", "demo");
+    const signupSessionToken = `tenant_${Date.now()}`;
+
+    setCookie("fastclean_session", signupSessionToken);
+    setCookie("fastclean_user_email", email);
     setCookie("fastclean_role", "owner");
     setCookie("fastclean_plan", selectedPlan);
     setCookie("fastclean_company", companyName);
+    setCookie("fastclean_platform_admin", "false");
 
-    window.localStorage.setItem("fastclean_signup", JSON.stringify({
+    const signupRecord = {
+      id: signupSessionToken,
       companyName,
       ownerName,
       email,
       phone: String(formData.get("phone") ?? ""),
       planCode: selectedPlan,
+      couponCode: couponCode.trim().toUpperCase(),
+      discountPercent: hasFullDiscount ? 100 : 0,
+      complimentary: hasFullDiscount,
+      billingStatus: hasFullDiscount ? "complimentary" : "active",
       activatedAt: new Date().toISOString()
-    }));
+    };
+    const accounts = readAccounts();
+
+    window.localStorage.setItem("fastclean_signup", JSON.stringify(signupRecord));
+    window.localStorage.setItem("fastclean_platform_accounts", JSON.stringify([signupRecord, ...accounts]));
 
     router.push(`/${locale}/dashboard`);
   }
@@ -167,7 +188,9 @@ export function SelfServiceSignup({ labels, locale }: { labels: SalesLabels; loc
                 <Input label={labels.cardNumber} name="cardNumber" placeholder="4242 4242 4242 4242" />
                 <Input label={labels.expiration} name="expiration" placeholder="12/29" />
                 <Input label={labels.cvc} name="cvc" placeholder="123" />
+                <Input label={labels.couponCode} name="couponCode" onChange={(event) => setCouponCode(event.target.value)} value={couponCode} />
               </div>
+              {hasFullDiscount ? <p className="mt-3 rounded-xl bg-green-50 p-3 text-sm font-black text-green-700 ring-1 ring-green-100">{labels.discountApplied}</p> : null}
             </div>
 
             {error ? <p className="rounded-xl bg-red-50 p-3 text-sm font-black text-red-700 ring-1 ring-red-100">{error}</p> : null}

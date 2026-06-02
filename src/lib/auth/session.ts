@@ -1,4 +1,4 @@
-import { demoTenantContext } from "@/lib/tenant/types";
+import { findUserBySessionToken } from "@/lib/auth/app-users";
 import type { RoleCode } from "@/lib/permissions/permissions";
 import type { PlanCode } from "@/lib/plans/plans";
 import type { TenantContext } from "@/lib/tenant/types";
@@ -11,58 +11,59 @@ export type AppSession = {
   tenant: TenantContext;
   accessibleCompanyIds: string[];
   accessibleLocationIds: string[];
+  isPlatformAdmin?: boolean;
 };
 
-export const demoUsers: Record<RoleCode, Omit<AppSession, "tenant" | "accessibleCompanyIds" | "accessibleLocationIds">> = {
-  owner: {
-    userId: "user_demo_owner",
-    name: "Rafael Silva",
-    email: "owner@fastcleanpro.com",
-    role: "owner"
-  },
-  manager: {
-    userId: "user_demo_manager",
-    name: "Mariana Costa",
-    email: "manager@fastcleanpro.com",
-    role: "manager"
-  },
-  office: {
-    userId: "user_demo_office",
-    name: "Sofia Admin",
-    email: "office@fastcleanpro.com",
-    role: "office"
-  },
-  driver: {
-    userId: "user_demo_driver",
-    name: "John Miller",
-    email: "driver@fastcleanpro.com",
-    role: "driver"
-  },
-  helper: {
-    userId: "user_demo_helper",
-    name: "Maria Santos",
-    email: "helper@fastcleanpro.com",
-    role: "helper"
-  }
-};
+function toSlug(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "fastclean";
+}
 
-export function createDemoSession(role: RoleCode = "owner", planCode: PlanCode = demoTenantContext.planCode, companyName?: string): AppSession {
-  const user = demoUsers[role] ?? demoUsers.owner;
-  const tenantId = companyName ? `tenant_${companyName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "fastclean"}` : demoTenantContext.tenantId;
-  const tenant = {
-    ...demoTenantContext,
-    tenantId,
-    planCode,
-    status: "active" as const
+export function createAppSession({
+  companyName,
+  planCode,
+  role,
+  sessionToken,
+  userEmail
+}: {
+  companyName?: string;
+  planCode?: PlanCode;
+  role?: RoleCode;
+  sessionToken?: string;
+  userEmail?: string;
+}): AppSession {
+  const account = findUserBySessionToken(sessionToken);
+  const resolvedCompanyName = companyName || account?.companyName || "FastClean Pro";
+  const tenantSlug = toSlug(resolvedCompanyName);
+  const tenant: TenantContext = {
+    tenantId: account?.isPlatformAdmin ? "tenant_platform_fastclean" : `tenant_${tenantSlug}`,
+    status: "active",
+    planCode: planCode || account?.planCode || "professional",
+    activeCompanyId: account?.isPlatformAdmin ? "company_platform_fastclean" : `company_${tenantSlug}`,
+    activeLocationId: account?.isPlatformAdmin ? "location_platform_admin" : `location_${tenantSlug}_main`,
+    companies: [
+      {
+        companyId: account?.isPlatformAdmin ? "company_platform_fastclean" : `company_${tenantSlug}`,
+        locationIds: [account?.isPlatformAdmin ? "location_platform_admin" : `location_${tenantSlug}_main`]
+      }
+    ]
   };
 
   return {
-    ...user,
-    name: companyName ? `${companyName} Admin` : user.name,
+    userId: sessionToken || "user_authenticated",
+    name: account?.name || `${resolvedCompanyName} Admin`,
+    email: account?.email || userEmail || "",
+    role: role || account?.role || "owner",
     tenant,
     accessibleCompanyIds: tenant.companies.map((company) => company.companyId),
-    accessibleLocationIds: tenant.companies.flatMap((company) => company.locationIds)
+    accessibleLocationIds: tenant.companies.flatMap((company) => company.locationIds),
+    isPlatformAdmin: account?.isPlatformAdmin ?? false
   };
 }
 
-export const demoSession = createDemoSession("owner");
+export const fallbackSession = createAppSession({
+  companyName: "FastClean Pro",
+  planCode: "business",
+  role: "owner",
+  sessionToken: "platform_admin_rafael",
+  userEmail: "rafael@fastcleanpro.com"
+});

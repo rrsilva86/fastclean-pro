@@ -1,10 +1,10 @@
 import { canAccessFeature } from "@/lib/tenant/scope";
-import { demoSession } from "@/lib/auth/session";
+import { fallbackSession } from "@/lib/auth/session";
 import type { AppModule } from "@/config/modules";
 import type { Permission } from "@/lib/permissions/permissions";
 
 export function getCurrentSession() {
-  return demoSession;
+  return fallbackSession;
 }
 
 export function canCurrentUserAccess(module: AppModule, permission: Permission | string) {

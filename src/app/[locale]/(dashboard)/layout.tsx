@@ -4,8 +4,9 @@ import { Award } from "lucide-react";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
+import { VersionBadge } from "@/components/layout/version-badge";
 import { getDictionary, createTranslator } from "@/lib/i18n/dictionaries";
-import { createDemoSession } from "@/lib/auth/session";
+import { createAppSession } from "@/lib/auth/session";
 import type { RoleCode } from "@/lib/permissions/permissions";
 import type { PlanCode } from "@/lib/plans/plans";
 import type { Locale } from "@/config/locales";
@@ -21,10 +22,12 @@ export default async function DashboardLayout({
   const t = createTranslator(getDictionary(locale));
   const safeLocale = locale as Locale;
   const cookieStore = await cookies();
+  const sessionToken = cookieStore.get("fastclean_session")?.value;
+  const userEmail = cookieStore.get("fastclean_user_email")?.value ? decodeURIComponent(cookieStore.get("fastclean_user_email")?.value ?? "") : undefined;
   const role = (cookieStore.get("fastclean_role")?.value ?? "owner") as RoleCode;
   const planCode = (cookieStore.get("fastclean_plan")?.value ?? "professional") as PlanCode;
   const companyName = cookieStore.get("fastclean_company")?.value ? decodeURIComponent(cookieStore.get("fastclean_company")?.value ?? "") : undefined;
-  const session = createDemoSession(role, planCode, companyName);
+  const session = createAppSession({ companyName, planCode, role, sessionToken, userEmail });
 
   return (
     <div className="flex min-h-screen bg-app-background">
@@ -60,6 +63,9 @@ export default async function DashboardLayout({
           </div>
         </header>
         <div className="px-5 pb-8 lg:px-8">{children}</div>
+        <footer className="px-5 pb-5 text-right lg:px-8">
+          <VersionBadge />
+        </footer>
       </main>
     </div>
   );

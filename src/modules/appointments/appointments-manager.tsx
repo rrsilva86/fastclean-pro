@@ -267,16 +267,8 @@ function expandAppointmentsForMonth(records: AppointmentRecord[], monthDate: Dat
 }
 
 function createDefaultAppointments(monthDate: Date): AppointmentRecord[] {
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-  const makeDate = (day: number) => `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-
-  return [
-    { id: "appt_ana", date: makeDate(3), time: "08:00", client: "Ana Martins", team: "Team A", service: "Deep Cleaning", extraServices: ["Oven Cleaning"], recurrence: "weekly", notes: "", status: "scheduled", price: "$180", durationMinutes: 180 },
-    { id: "appt_julia", date: makeDate(7), time: "09:30", client: "Julia Costa", team: "Team B", service: "Regular Cleaning", extraServices: [], recurrence: "every_two_weeks", notes: "", status: "scheduled", price: "$145", durationMinutes: 150 },
-    { id: "appt_carla", date: makeDate(12), time: "11:00", client: "Carla Gomez", team: "Team C", service: "Deep Cleaning", extraServices: ["Refrigerator Cleaning"], recurrence: "does_not_repeat", notes: "", status: "started", price: "$230", durationMinutes: 210 },
-    { id: "appt_mia", date: makeDate(18), time: "13:00", client: "Mia Johnson", team: "Team A", service: "Move-Out Cleaning", extraServices: [], recurrence: "does_not_repeat", notes: "", status: "finished", price: "$210", durationMinutes: 180 }
-  ];
+  void monthDate;
+  return [];
 }
 
 function statusLabel(status: AppointmentStatus, labels: AppointmentLabels) {

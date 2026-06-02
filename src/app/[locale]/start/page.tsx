@@ -24,6 +24,8 @@ export default async function StartPage({ params }: { params: Promise<{ locale: 
         cardNumber: t("sales.cardNumber"),
         expiration: t("sales.expiration"),
         cvc: t("sales.cvc"),
+        couponCode: t("sales.couponCode"),
+        discountApplied: t("sales.discountApplied"),
         startTrial: t("sales.startTrial"),
         secureCheckout: t("sales.secureCheckout"),
         readyToday: t("sales.readyToday"),

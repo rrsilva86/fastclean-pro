@@ -16,20 +16,16 @@ export type TenantContext = {
   activeLocationId?: string;
 };
 
-export const demoTenantContext: TenantContext = {
-  tenantId: "tenant_demo_fastclean",
-  status: "trial",
+export const initialTenantContext: TenantContext = {
+  tenantId: "tenant_fastclean_pro",
+  status: "active",
   planCode: "professional",
-  activeCompanyId: "company_demo_fastclean",
-  activeLocationId: "location_demo_boston",
+  activeCompanyId: "company_fastclean_pro",
+  activeLocationId: "location_fastclean_pro",
   companies: [
     {
-      companyId: "company_demo_fastclean",
-      locationIds: ["location_demo_boston", "location_demo_cambridge"]
-    },
-    {
-      companyId: "company_demo_franchise",
-      locationIds: ["location_demo_miami"]
+      companyId: "company_fastclean_pro",
+      locationIds: ["location_fastclean_pro"]
     }
   ]
 };

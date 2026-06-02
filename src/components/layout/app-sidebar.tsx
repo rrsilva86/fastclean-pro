@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Monitor,
   Settings2,
+  ShieldCheck,
   User,
   Users,
   WalletCards
@@ -95,6 +96,17 @@ export function AppSidebar({ locale, session }: { locale: Locale; session: AppSe
             </Link>
           );
         })}
+        {session.isPlatformAdmin ? (
+          <Link
+            className={`flex h-11 w-12 items-center justify-start rounded-lg px-3 text-sm font-semibold transition-all duration-200 group-hover/sidebar:w-full group-hover/sidebar:gap-3 group-hover/sidebar:px-4 ${
+              pathname === `/${locale}/admin` ? "bg-cyan-50 text-slate-950" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+            }`}
+            href={`/${locale}/admin`}
+          >
+            <ShieldCheck className="h-5 w-5 shrink-0" strokeWidth={1.9} />
+            <span className="truncate opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100">{t("nav.admin")}</span>
+          </Link>
+        ) : null}
       </nav>
     </aside>
   );

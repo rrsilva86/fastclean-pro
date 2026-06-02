@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Bell, CalendarDays, Save, UserRound } from "lucide-react";
 import { Button, Card, CardContent, CardHeader } from "@/components/design-system";
+import { buildScopedStorageKey } from "@/lib/storage/local-records";
 
 type SystemSettings = {
   defaultJoinedDateToday: boolean;
@@ -48,7 +49,7 @@ function settingFromStorage() {
   }
 
   try {
-    return { ...defaultSettings, ...JSON.parse(window.localStorage.getItem(storageKey) ?? "{}") } as SystemSettings;
+    return { ...defaultSettings, ...JSON.parse(window.localStorage.getItem(buildScopedStorageKey(storageKey)) ?? "{}") } as SystemSettings;
   } catch {
     return defaultSettings;
   }
@@ -77,7 +78,7 @@ export function SystemSettingsManager({ labels }: { labels: SystemSettingsLabels
   }
 
   function saveSettings() {
-    window.localStorage.setItem(storageKey, JSON.stringify(settings));
+    window.localStorage.setItem(buildScopedStorageKey(storageKey), JSON.stringify(settings));
     setSaved(true);
   }
 

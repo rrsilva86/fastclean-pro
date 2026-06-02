@@ -8,7 +8,11 @@ export function LogoutButton({ label, locale }: { label: string; locale: string 
 
   function logout() {
     document.cookie = "fastclean_session=; path=/; max-age=0; SameSite=Lax";
+    document.cookie = "fastclean_user_email=; path=/; max-age=0; SameSite=Lax";
     document.cookie = "fastclean_role=; path=/; max-age=0; SameSite=Lax";
+    document.cookie = "fastclean_plan=; path=/; max-age=0; SameSite=Lax";
+    document.cookie = "fastclean_company=; path=/; max-age=0; SameSite=Lax";
+    document.cookie = "fastclean_platform_admin=; path=/; max-age=0; SameSite=Lax";
     router.push(`/${locale}/login`);
     router.refresh();
   }
