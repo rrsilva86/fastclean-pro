@@ -5,6 +5,7 @@ import { LogoutButton } from "@/components/auth/logout-button";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import { VersionBadge } from "@/components/layout/version-badge";
+import { InstallAppBanner } from "@/components/install/install-app-banner";
 import { getDictionary, createTranslator } from "@/lib/i18n/dictionaries";
 import { createAppSession } from "@/lib/auth/session";
 import type { RoleCode } from "@/lib/permissions/permissions";
@@ -66,6 +67,7 @@ export default async function DashboardLayout({
             <LogoutButton label={t("nav.logout")} locale={locale} />
           </div>
         </header>
+        <InstallAppBanner dismissLabel={t("install.dismissBanner")} installLabel={t("install.installApp")} message={t("install.bannerMessage")} />
         <div className="px-4 pb-24 lg:px-5 lg:pb-5">{children}</div>
       </main>
     </div>

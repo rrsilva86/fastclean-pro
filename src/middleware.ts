@@ -10,17 +10,27 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname === "/install") {
+    return NextResponse.next();
+  }
+
   if (!hasLocale) {
     request.nextUrl.pathname = `/${defaultLocale}${pathname}`;
     return NextResponse.redirect(request.nextUrl);
   }
 
   const locale = locales.find((item) => pathname === `/${item}` || pathname.startsWith(`/${item}/`)) ?? defaultLocale;
+  const isInstall = pathname === `/${locale}/install`;
   const isLogin = pathname === `/${locale}/login`;
   const isPublicSalesFlow = pathname === `/${locale}/start`;
   const isAdminRoute = pathname === `/${locale}/admin`;
   const isAuthenticated = isKnownSession(request.cookies.get("fastclean_session")?.value);
   const isPlatformAdmin = request.cookies.get("fastclean_platform_admin")?.value === "true";
+
+  if (isInstall) {
+    request.nextUrl.pathname = "/install";
+    return NextResponse.redirect(request.nextUrl);
+  }
 
   if (!isAuthenticated && !isLogin && !isPublicSalesFlow) {
     request.nextUrl.pathname = `/${locale}/login`;

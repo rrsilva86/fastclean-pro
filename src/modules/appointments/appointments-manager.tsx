@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { CalendarCheck, ChevronLeft, ChevronRight, Mail, MapPinned, MessageSquare, Plus, Trash2, UserPlus, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CalendarCheck, ChevronLeft, ChevronRight, Clock3, FilterX, Mail, MapPin, MapPinned, MessageSquare, Plus, Trash2, UserPlus, X } from "lucide-react";
 import { Badge, Button, Card, CardContent, CardHeader, Input, Modal, Table, Td, Th } from "@/components/design-system";
 import { readLocalRecords, readRemoteRecords, writeLocalRecords } from "@/lib/storage/local-records";
 import { defaultClients, type ClientRecord } from "@/modules/clients/types";
@@ -10,7 +10,8 @@ import { ClientForm, type ClientsLabels } from "@/modules/clients/clients-manage
 import { defaultCleaningServiceTypes, defaultExtraServices } from "@/modules/services/types";
 import { defaultAppointmentMessageTemplates, type AppointmentMessageTemplateKey, type AppointmentMessageTemplates } from "@/lib/highlevel/message-templates";
 
-type AppointmentStatus = "scheduled" | "started" | "finished" | "paid" | "canceled";
+type AppointmentStatus = "scheduled" | "awaiting_confirmation" | "confirmed" | "in_progress" | "completed" | "cancelled" | "no_show" | "started" | "finished" | "paid" | "canceled";
+type CalendarView = "month" | "week" | "day" | "agenda";
 
 type AppointmentRecord = {
   id: string;
@@ -25,6 +26,11 @@ type AppointmentRecord = {
   status: AppointmentStatus;
   price: string;
   durationMinutes: number;
+  clientId?: string;
+  source?: string;
+  legacySource?: string;
+  legacyRecurrenceLabel?: string | null;
+  migrationBatchId?: string;
   originalDate?: string;
   sourceId?: string;
   isRecurringInstance?: boolean;
@@ -33,6 +39,12 @@ type AppointmentRecord = {
 type AppointmentLabels = {
   cancel: string;
   canceled: string;
+  awaitingConfirmation: string;
+  confirmed: string;
+  inProgress: string;
+  completed: string;
+  cancelled: string;
+  noShow: string;
   checkIn: string;
   client: string;
   clientCommunicationUnavailable: string;
@@ -50,6 +62,29 @@ type AppointmentLabels = {
   invoiceNotice: string;
   arrivalNotice: string;
   moreJobs: string;
+  agenda: string;
+  allTeams: string;
+  allServices: string;
+  allStatuses: string;
+  allRecurrences: string;
+  clearFilters: string;
+  customerSearch: string;
+  dayView: string;
+  weekView: string;
+  monthView: string;
+  agendaView: string;
+  servicePrice: string;
+  estimatedDuration: string;
+  assignedTeam: string;
+  address: string;
+  payment: string;
+  invoice: string;
+  communicationStatus: string;
+  notSent: string;
+  paidLabel: string;
+  noInvoice: string;
+  openAppointment: string;
+  detailsPreview: string;
   newAppointment: string;
   newClient: string;
   noExtraServices: string;
@@ -184,14 +219,42 @@ function normalizeTimeInput(value: string) {
 }
 
 function appointmentEndTime(appointment: AppointmentRecord) {
+  if (!appointment.durationMinutes) {
+    return "";
+  }
+
   return formatMinutesAsTime(parseTimeToMinutes(appointment.time) + appointment.durationMinutes);
 }
 
 function appointmentTimeRange(appointment: AppointmentRecord) {
+  if (!appointment.durationMinutes) {
+    return appointment.time;
+  }
+
   return `${appointment.time} - ${appointmentEndTime(appointment)}`;
 }
 
+function formatAppointmentTime(value: string) {
+  const normalized = normalizeTimeInput(value);
+  const [hours, minutes] = normalized.split(":").map(Number);
+  const period = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours % 12 || 12;
+  return `${displayHours}:${String(minutes).padStart(2, "0")} ${period}`;
+}
+
+function formatAppointmentTimeRange(appointment: AppointmentRecord) {
+  if (!appointment.durationMinutes) {
+    return formatAppointmentTime(appointment.time);
+  }
+
+  return `${formatAppointmentTime(appointment.time)} - ${formatAppointmentTime(appointmentEndTime(appointment))}`;
+}
+
 function appointmentHasConflict(appointment: AppointmentRecord, appointments: AppointmentRecord[]) {
+  if (!appointment.durationMinutes || !appointment.team) {
+    return false;
+  }
+
   const start = parseTimeToMinutes(appointment.time);
   const endWithBuffer = start + appointment.durationMinutes + appointmentBufferMinutes;
 
@@ -277,12 +340,96 @@ function createDefaultAppointments(monthDate: Date): AppointmentRecord[] {
   return [];
 }
 
+function normalizedStatus(status: AppointmentStatus): AppointmentStatus {
+  if (status === "started") {
+    return "in_progress";
+  }
+
+  if (status === "finished" || status === "paid") {
+    return "completed";
+  }
+
+  if (status === "canceled") {
+    return "cancelled";
+  }
+
+  return status;
+}
+
 function statusLabel(status: AppointmentStatus, labels: AppointmentLabels) {
-  return status === "started" ? labels.started : status === "finished" ? labels.finished : status === "paid" ? labels.paid : status === "canceled" ? labels.canceled : labels.scheduled;
+  const statusKey = normalizedStatus(status);
+  if (statusKey === "awaiting_confirmation") {
+    return labels.awaitingConfirmation;
+  }
+
+  if (statusKey === "confirmed") {
+    return labels.confirmed;
+  }
+
+  if (statusKey === "in_progress") {
+    return labels.inProgress;
+  }
+
+  if (statusKey === "completed") {
+    return labels.completed;
+  }
+
+  if (statusKey === "cancelled") {
+    return labels.cancelled;
+  }
+
+  if (statusKey === "no_show") {
+    return labels.noShow;
+  }
+
+  return labels.scheduled;
 }
 
 function statusTone(status: AppointmentStatus) {
-  return status === "started" ? "yellow" : status === "finished" ? "green" : status === "paid" ? "teal" : status === "canceled" ? "red" : "blue";
+  const statusKey = normalizedStatus(status);
+  return statusKey === "awaiting_confirmation" ? "yellow" : statusKey === "confirmed" ? "green" : statusKey === "in_progress" ? "teal" : statusKey === "completed" ? "green" : statusKey === "cancelled" || statusKey === "no_show" ? "red" : "blue";
+}
+
+function statusBorderClass(status: AppointmentStatus) {
+  const statusKey = normalizedStatus(status);
+  if (statusKey === "awaiting_confirmation") {
+    return "border-l-yellow-400";
+  }
+
+  if (statusKey === "confirmed" || statusKey === "completed") {
+    return "border-l-green-400";
+  }
+
+  if (statusKey === "in_progress") {
+    return "border-l-teal-400";
+  }
+
+  if (statusKey === "cancelled" || statusKey === "no_show") {
+    return "border-l-red-400";
+  }
+
+  return "border-l-cyan-400";
+}
+
+function statusDotClass(status: AppointmentStatus) {
+  const statusKey = normalizedStatus(status);
+  if (statusKey === "awaiting_confirmation") {
+    return "bg-yellow-400";
+  }
+
+  if (statusKey === "confirmed" || statusKey === "completed") {
+    return "bg-green-500";
+  }
+
+  if (statusKey === "in_progress") {
+    return "bg-teal-500";
+  }
+
+  if (statusKey === "cancelled" || statusKey === "no_show") {
+    return "bg-red-500";
+  }
+
+  return "bg-cyan-500";
 }
 
 function recurrenceLabel(recurrence: string, labels: AppointmentLabels) {
@@ -307,6 +454,38 @@ function recurrenceLabel(recurrence: string, labels: AppointmentLabels) {
   }
 
   return "";
+}
+
+function compactRecurrenceLabel(recurrence: string) {
+  if (recurrence === "weekly") {
+    return "W";
+  }
+
+  if (recurrence === "every_two_weeks") {
+    return "2W";
+  }
+
+  if (recurrence === "every_three_weeks") {
+    return "3W";
+  }
+
+  if (recurrence === "every_four_weeks") {
+    return "4W";
+  }
+
+  if (recurrence === "monthly") {
+    return "M";
+  }
+
+  if (recurrence === "custom") {
+    return "*";
+  }
+
+  return "";
+}
+
+function appointmentCompactRecurrenceLabel(appointment: AppointmentRecord) {
+  return appointment.legacyRecurrenceLabel || compactRecurrenceLabel(appointment.recurrence);
 }
 
 function recurrenceTone(recurrence: string) {
@@ -353,9 +532,10 @@ function normalizeAppointments(records: AppointmentRecord[]) {
   return records.map((appointment) => ({
     ...appointment,
     extraServices: Array.isArray(appointment.extraServices) ? appointment.extraServices : [],
-    durationMinutes: Number(appointment.durationMinutes || 180),
+    durationMinutes: Number(appointment.durationMinutes ?? 180),
     recurrence: appointment.recurrence || "does_not_repeat",
-    notes: appointment.notes || ""
+    notes: appointment.notes || "",
+    status: normalizedStatus(appointment.status)
   }));
 }
 
@@ -557,9 +737,11 @@ function AppointmentForm({
             ))}
           </select>
         </label>
-        <div className="rounded-lg border border-cyan-100 bg-cyan-50/50 p-3 text-sm font-bold text-cyan-800">
-          {labels.endsAt}: {appointmentEndTime(liveAppointment)} · {labels.bufferTime}
-        </div>
+        {appointmentEndTime(liveAppointment) ? (
+          <div className="rounded-lg border border-cyan-100 bg-cyan-50/50 p-3 text-sm font-bold text-cyan-800">
+            {labels.endsAt}: {appointmentEndTime(liveAppointment)} · {labels.bufferTime}
+          </div>
+        ) : null}
         <label className={fieldLabelClass}>
           {labels.recurrence}
           <select className={selectClass} defaultValue={appointment.recurrence} name="recurrence">
@@ -575,10 +757,12 @@ function AppointmentForm({
           {labels.status}
           <select className={selectClass} defaultValue={appointment.status} name="status">
             <option value="scheduled">{labels.scheduled}</option>
-            <option value="started">{labels.started}</option>
-            <option value="finished">{labels.finished}</option>
-            <option value="paid">{labels.paid}</option>
-            <option value="canceled">{labels.canceled}</option>
+            <option value="awaiting_confirmation">{labels.awaitingConfirmation}</option>
+            <option value="confirmed">{labels.confirmed}</option>
+            <option value="in_progress">{labels.inProgress}</option>
+            <option value="completed">{labels.completed}</option>
+            <option value="cancelled">{labels.cancelled}</option>
+            <option value="no_show">{labels.noShow}</option>
           </select>
         </label>
         </div>
@@ -725,21 +909,193 @@ function buildClientFromFormData(formData: FormData): ClientRecord {
   };
 }
 
+function clientPrimaryAddress(client: ClientRecord | undefined) {
+  const address = client?.addresses?.[0];
+  if (!address) {
+    return "";
+  }
+
+  return address.formatted || [address.street, address.city, address.state, address.postalCode].filter(Boolean).join(", ");
+}
+
+function clientPropertySize(client: ClientRecord | undefined) {
+  const property = client?.property ?? "";
+  const match = property.match(/(\d[\d,.\s]*)\s*(sqft|ft²|sf)/i);
+  return match ? `${match[1].trim()} sqft` : "";
+}
+
+function appointmentMatchesFilter(appointment: AppointmentRecord, client: ClientRecord | undefined, filters: { search: string; team: string; service: string; status: string; recurrence: string }) {
+  const search = filters.search.trim().toLowerCase();
+  const address = clientPrimaryAddress(client).toLowerCase();
+
+  if (filters.team && appointment.team !== filters.team) {
+    return false;
+  }
+
+  if (filters.service && appointment.service !== filters.service) {
+    return false;
+  }
+
+  if (filters.status && normalizedStatus(appointment.status) !== filters.status) {
+    return false;
+  }
+
+  if (filters.recurrence && appointment.recurrence !== filters.recurrence) {
+    return false;
+  }
+
+  if (search && !`${appointment.client} ${appointment.service} ${appointment.team} ${address}`.toLowerCase().includes(search)) {
+    return false;
+  }
+
+  return true;
+}
+
+function AppointmentHoverCard({ appointment, client, labels, onClose, onOpen }: { appointment: AppointmentRecord; client?: ClientRecord; labels: AppointmentLabels; onClose: () => void; onOpen: () => void }) {
+  const address = clientPrimaryAddress(client);
+  const propertySize = clientPropertySize(client);
+  const recurrence = recurrenceLabel(appointment.recurrence, labels);
+
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div className="absolute left-0 top-full z-30 mt-2 w-[min(22rem,80vw)] rounded-xl border border-slate-200 bg-white p-4 text-left shadow-2xl ring-1 ring-slate-950/5 md:left-auto md:right-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-black text-slate-950">{appointment.client}</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">
+            {appointment.service}{propertySize ? ` · ${propertySize}` : ""}
+          </p>
+        </div>
+        <Badge tone={statusTone(appointment.status)}>{statusLabel(appointment.status, labels)}</Badge>
+      </div>
+
+      <div className="mt-4 grid gap-2 text-xs font-bold text-slate-600">
+        {address ? (
+          <DetailRow icon={<MapPin className="h-3.5 w-3.5" />} label={labels.address} value={address} />
+        ) : null}
+        {appointment.price ? <DetailRow label={labels.servicePrice} value={appointment.price} /> : null}
+        <DetailRow icon={<Clock3 className="h-3.5 w-3.5" />} label={labels.time} value={formatAppointmentTimeRange(appointment)} />
+        {appointment.durationMinutes ? <DetailRow label={labels.estimatedDuration} value={`${appointment.durationMinutes / 60}h`} /> : null}
+        {appointment.team ? <DetailRow label={labels.assignedTeam} value={appointment.team} /> : null}
+        {recurrence ? <DetailRow label={labels.recurrence} value={recurrence} /> : null}
+        {appointment.notes ? <DetailRow label={labels.notes} value={appointment.notes} /> : null}
+        <DetailRow label={labels.communicationStatus} value={labels.notSent} />
+        <DetailRow label={labels.invoice} value={labels.noInvoice} />
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button onClick={onOpen} type="button" variant="outline">{labels.openAppointment}</Button>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[auto_1fr] gap-2 rounded-lg bg-slate-50 px-3 py-2">
+      <span className="mt-0.5 text-slate-400">{icon}</span>
+      <p>
+        <span className="text-slate-400">{label}: </span>
+        <span className="text-slate-700">{value}</span>
+      </p>
+    </div>
+  );
+}
+
+function CompactAppointmentCard({
+  appointment,
+  client,
+  labels,
+  onOpen
+}: {
+  appointment: AppointmentRecord;
+  client?: ClientRecord;
+  labels: AppointmentLabels;
+  onOpen: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recurrence = appointmentCompactRecurrenceLabel(appointment);
+
+  function openHover() {
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current);
+    }
+
+    hoverTimer.current = setTimeout(() => setOpen(true), 180);
+  }
+
+  function closeHover() {
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current);
+    }
+
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative" onMouseEnter={openHover} onMouseLeave={closeHover}>
+      <button
+        aria-label={`${appointment.client}, ${formatAppointmentTime(appointment.time)}, ${statusLabel(appointment.status, labels)}`}
+        className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-1.5 rounded-md border border-l-4 bg-white px-2 py-1.5 text-left text-[11px] shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 focus:outline-none focus:ring-2 focus:ring-cyan-100 ${statusBorderClass(appointment.status)}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpen();
+        }}
+        onFocus={openHover}
+        onBlur={closeHover}
+        type="button"
+      >
+        <span className="font-black text-slate-600">{formatAppointmentTime(appointment.time)}</span>
+        <span className="truncate font-black text-slate-900">{appointment.client}</span>
+        {recurrence ? <span className="rounded bg-slate-100 px-1.5 py-0.5 font-black text-slate-500">{recurrence}</span> : null}
+        <span aria-hidden="true" className={`h-2 w-2 rounded-full ${statusDotClass(appointment.status)}`} />
+      </button>
+      {open ? <AppointmentHoverCard appointment={appointment} client={client} labels={labels} onClose={closeHover} onOpen={onOpen} /> : null}
+    </div>
+  );
+}
+
 export function AppointmentsManager({ clientLabels, labels, locale, month }: { clientLabels: ClientsLabels; labels: AppointmentLabels; locale: string; month?: string }) {
   const selectedMonth = parseMonth(month);
   const [appointments, setAppointments] = useState<AppointmentRecord[]>(createDefaultAppointments(selectedMonth));
   const [clients, setClients] = useState<ClientRecord[]>(defaultClients);
+  const [calendarView, setCalendarView] = useState<CalendarView>("month");
+  const [filters, setFilters] = useState({ search: "", team: "", service: "", status: "", recurrence: "" });
   const [draftAppointment, setDraftAppointment] = useState<AppointmentRecord | null>(null);
   const [pendingRecurringSave, setPendingRecurringSave] = useState<{ originalAppointment: AppointmentRecord; savedAppointment: AppointmentRecord } | null>(null);
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [showClientModal, setShowClientModal] = useState(false);
   const monthDays = createMonthDays(selectedMonth);
   const visibleAppointments = expandAppointmentsForMonth(appointments, selectedMonth);
-  const selectedDayAppointments = selectedDayKey ? visibleAppointments.filter((appointment) => appointment.date === selectedDayKey) : [];
+  const clientByName = useMemo(() => new Map(clients.map((client) => [client.name, client])), [clients]);
+  const filteredAppointments = useMemo(
+    () => visibleAppointments.filter((appointment) => appointmentMatchesFilter(appointment, clientByName.get(appointment.client), filters)),
+    [clientByName, filters, visibleAppointments]
+  );
+  const selectedDayAppointments = selectedDayKey ? filteredAppointments.filter((appointment) => appointment.date === selectedDayKey) : [];
   const selectedDayLabel = selectedDayKey ? new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric" }).format(parseDateKey(selectedDayKey)) : "";
   const monthTitle = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(selectedMonth);
   const weekdayLabels = Array.from({ length: 7 }, (_, index) => new Intl.DateTimeFormat(locale, { weekday: "short" }).format(new Date(2026, 1, index + 1)));
   const nextMonths = [0, 1, 2, 3].map((offset) => addMonths(selectedMonth, offset));
+  const todayKey = formatDateKey(new Date());
+  const selectedDayForView = selectedDayKey ?? todayKey;
+  const selectedDayViewAppointments = filteredAppointments.filter((appointment) => appointment.date === selectedDayForView);
+  const weekStart = addDays(parseDateKey(selectedDayForView), -parseDateKey(selectedDayForView).getDay());
+  const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  const teams = Array.from(new Set(visibleAppointments.map((appointment) => appointment.team).filter(Boolean))).sort();
+  const services = Array.from(new Set(visibleAppointments.map((appointment) => appointment.service).filter(Boolean))).sort();
+  const recurrences = Array.from(new Set(visibleAppointments.map((appointment) => appointment.recurrence).filter((recurrence) => recurrence !== "does_not_repeat"))).sort();
 
   function nextAvailableTime(date: string, team = "Team A") {
     const teamAppointments = visibleAppointments
@@ -762,6 +1118,22 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
     readRemoteRecords(storageKey, localAppointments).then((records) => setAppointments(normalizeAppointments(records)));
     readRemoteRecords(clientsStorageKey, localClients).then(setClients);
   }, [month]);
+
+  useEffect(() => {
+    const savedView = window.localStorage.getItem("fastclean_appointments_view") as CalendarView | null;
+    if (savedView === "month" || savedView === "week" || savedView === "day" || savedView === "agenda") {
+      setCalendarView(savedView);
+    }
+  }, []);
+
+  function changeCalendarView(view: CalendarView) {
+    setCalendarView(view);
+    window.localStorage.setItem("fastclean_appointments_view", view);
+  }
+
+  function clearFilters() {
+    setFilters({ search: "", team: "", service: "", status: "", recurrence: "" });
+  }
 
   function openNewAppointment(date = formatDateKey(new Date())) {
     setSelectedDayKey(null);
@@ -860,9 +1232,9 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
     const appointmentAlreadyExists = appointments.some((appointment) => appointment.id === appointmentId);
     const recurringAppointment = visibleAppointments.find((appointment) => appointment.id === appointmentId);
     const nextAppointments = appointmentAlreadyExists
-      ? appointments.map((appointment) => (appointment.id === appointmentId ? { ...appointment, status: "started" as const } : appointment))
+      ? appointments.map((appointment) => (appointment.id === appointmentId ? { ...appointment, status: "in_progress" as const } : appointment))
       : recurringAppointment
-        ? [{ ...recurringAppointment, sourceId: recurringAppointment.sourceId ?? recurringAppointment.id.split("_repeat_")[0], isRecurringInstance: true, status: "started" as const }, ...appointments]
+        ? [{ ...recurringAppointment, sourceId: recurringAppointment.sourceId ?? recurringAppointment.id.split("_repeat_")[0], isRecurringInstance: true, status: "in_progress" as const }, ...appointments]
         : appointments;
     setAppointments(nextAppointments);
     writeLocalRecords(storageKey, nextAppointments);
@@ -882,8 +1254,15 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
     <div className="grid gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
-          {[labels.scheduled, labels.started, labels.finished, labels.paid, labels.canceled].map((label) => (
-            <Badge key={label} tone="gray">{label}</Badge>
+          {[
+            { label: labels.scheduled, tone: "blue" as const },
+            { label: labels.awaitingConfirmation, tone: "yellow" as const },
+            { label: labels.confirmed, tone: "green" as const },
+            { label: labels.inProgress, tone: "teal" as const },
+            { label: labels.completed, tone: "green" as const },
+            { label: labels.cancelled, tone: "red" as const }
+          ].map((item) => (
+            <Badge key={item.label} tone={item.tone}>{item.label}</Badge>
           ))}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -906,6 +1285,9 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
               <h2 className="mt-1 text-2xl font-black capitalize text-slate-950">{monthTitle}</h2>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Link className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-600 transition hover:border-cyan-200 hover:bg-cyan-50" href={`/${locale}/appointments?month=${monthKey(new Date())}`}>
+                {labels.scheduled}
+              </Link>
               <Link aria-label={labels.previousMonth} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50" href={`/${locale}/appointments?month=${monthKey(addMonths(selectedMonth, -1))}`}>
                 <ChevronLeft className="h-4 w-4" />
               </Link>
@@ -920,13 +1302,80 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
             </div>
           </div>
 
+          <div className="grid gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3 lg:grid-cols-[minmax(0,1.3fr)_repeat(4,minmax(0,1fr))_auto] lg:items-end">
+            <Input
+              label={labels.customerSearch}
+              name="appointmentSearch"
+              onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+              placeholder={labels.customerSearch}
+              value={filters.search}
+            />
+            <label className={fieldLabelClass}>
+              {labels.team}
+              <select className={selectClass} onChange={(event) => setFilters((current) => ({ ...current, team: event.target.value }))} value={filters.team}>
+                <option value="">{labels.allTeams}</option>
+                {teams.map((team) => <option key={team} value={team}>{team}</option>)}
+              </select>
+            </label>
+            <label className={fieldLabelClass}>
+              {labels.service}
+              <select className={selectClass} onChange={(event) => setFilters((current) => ({ ...current, service: event.target.value }))} value={filters.service}>
+                <option value="">{labels.allServices}</option>
+                {services.map((service) => <option key={service} value={service}>{service}</option>)}
+              </select>
+            </label>
+            <label className={fieldLabelClass}>
+              {labels.status}
+              <select className={selectClass} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))} value={filters.status}>
+                <option value="">{labels.allStatuses}</option>
+                <option value="scheduled">{labels.scheduled}</option>
+                <option value="awaiting_confirmation">{labels.awaitingConfirmation}</option>
+                <option value="confirmed">{labels.confirmed}</option>
+                <option value="in_progress">{labels.inProgress}</option>
+                <option value="completed">{labels.completed}</option>
+                <option value="cancelled">{labels.cancelled}</option>
+                <option value="no_show">{labels.noShow}</option>
+              </select>
+            </label>
+            <label className={fieldLabelClass}>
+              {labels.recurrence}
+              <select className={selectClass} onChange={(event) => setFilters((current) => ({ ...current, recurrence: event.target.value }))} value={filters.recurrence}>
+                <option value="">{labels.allRecurrences}</option>
+                {recurrences.map((recurrence) => <option key={recurrence} value={recurrence}>{recurrenceLabel(recurrence, labels)}</option>)}
+              </select>
+            </label>
+            <Button onClick={clearFilters} type="button" variant="outline">
+              <FilterX className="h-4 w-4" />
+              {labels.clearFilters}
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: "month" as const, label: labels.monthView },
+              { key: "week" as const, label: labels.weekView },
+              { key: "day" as const, label: labels.dayView },
+              { key: "agenda" as const, label: labels.agendaView }
+            ].map((item) => (
+              <button
+                className={`rounded-xl border px-4 py-2 text-sm font-black transition ${calendarView === item.key ? "border-cyan-200 bg-cyan-50 text-cyan-700" : "border-slate-200 bg-white text-slate-600 hover:border-cyan-200 hover:bg-cyan-50"}`}
+                key={item.key}
+                onClick={() => changeCalendarView(item.key)}
+                type="button"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {calendarView === "month" ? (
           <div className="overflow-x-auto pb-2">
             <div className="grid min-w-[760px] grid-cols-7 gap-2">
               {weekdayLabels.map((weekday) => (
                 <div className="px-2 py-2 text-center text-xs font-black uppercase tracking-wide text-slate-400" key={weekday}>{weekday}</div>
               ))}
               {monthDays.map((day, index) => {
-                const dayAppointments = day ? visibleAppointments.filter((appointment) => appointment.date === formatDateKey(day)) : [];
+                const dayAppointments = day ? filteredAppointments.filter((appointment) => appointment.date === formatDateKey(day)) : [];
                 if (!day) {
                   return <div aria-hidden="true" className="min-h-36 rounded-xl border border-transparent p-2" key={`empty-${index}`} />;
                 }
@@ -949,23 +1398,7 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
                     <p className="text-sm font-black text-slate-700">{day.getDate()}</p>
                     <div className="mt-2 grid gap-1.5">
                       {dayAppointments.map((appointment) => (
-                        <div className={`rounded-lg border bg-white p-2 shadow-sm ${recurrenceBorderClass(appointment.recurrence)}`} key={appointment.id}>
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[11px] font-black text-slate-500">{appointmentTimeRange(appointment)}</span>
-                            <span className="text-[11px] font-black text-slate-900">{appointment.price}</span>
-                          </div>
-                          <span className="mt-1 block truncate text-xs font-black text-primary" onClick={(event) => { event.stopPropagation(); setDraftAppointment(appointment); }}>
-                            {appointment.client}
-                          </span>
-                          <p className="truncate text-[11px] font-bold text-slate-400">{appointment.team}</p>
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            <Badge tone={statusTone(appointment.status)}>{statusLabel(appointment.status, labels)}</Badge>
-                            {appointmentHasConflict(appointment, dayAppointments) ? <Badge tone="red">{labels.scheduleConflict}</Badge> : null}
-                            {recurrenceLabel(appointment.recurrence, labels) ? (
-                              <Badge tone={recurrenceTone(appointment.recurrence)}>{recurrenceLabel(appointment.recurrence, labels)}</Badge>
-                            ) : null}
-                          </div>
-                        </div>
+                        <CompactAppointmentCard appointment={appointment} client={clientByName.get(appointment.client)} key={appointment.id} labels={labels} onOpen={() => setDraftAppointment(appointment)} />
                       ))}
                     </div>
                   </div>
@@ -973,6 +1406,97 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
               })}
             </div>
           </div>
+          ) : null}
+
+          {calendarView === "week" ? (
+            <div className="overflow-x-auto pb-2">
+              <div className="grid min-w-[820px] grid-cols-7 gap-2">
+                {weekDays.map((day) => {
+                  const dayKey = formatDateKey(day);
+                  const dayAppointments = filteredAppointments.filter((appointment) => appointment.date === dayKey);
+                  return (
+                    <div className="min-h-96 rounded-xl border border-slate-100 bg-slate-50/70 p-2" key={dayKey}>
+                      <button className="mb-2 w-full rounded-lg px-2 py-1 text-left text-xs font-black uppercase text-slate-500 hover:bg-white" onClick={() => { setSelectedDayKey(dayKey); changeCalendarView("day"); }} type="button">
+                        {new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric" }).format(day)}
+                      </button>
+                      <div className="grid gap-2">
+                        {dayAppointments.map((appointment) => (
+                          <button className={`rounded-lg border border-l-4 bg-white p-2 text-left shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 ${statusBorderClass(appointment.status)}`} key={appointment.id} onClick={() => setDraftAppointment(appointment)} type="button">
+                            <p className="text-xs font-black text-slate-500">{formatAppointmentTimeRange(appointment)}</p>
+                            <p className="mt-1 truncate text-sm font-black text-slate-950">{appointment.client}</p>
+                            <p className="truncate text-xs font-bold text-slate-500">{appointment.service} · {appointment.team}</p>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              <Badge tone={statusTone(appointment.status)}>{statusLabel(appointment.status, labels)}</Badge>
+                              {appointmentCompactRecurrenceLabel(appointment) ? <Badge tone="gray">{appointmentCompactRecurrenceLabel(appointment)}</Badge> : null}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {calendarView === "day" ? (
+            <div className="grid gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-base font-black text-slate-950">{new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(parseDateKey(selectedDayForView))}</h3>
+                <Input label={labels.date} name="dayPicker" onChange={(event) => setSelectedDayKey(event.target.value)} type="date" value={selectedDayForView} />
+              </div>
+              {selectedDayViewAppointments.map((appointment) => {
+                const client = clientByName.get(appointment.client);
+                const address = clientPrimaryAddress(client);
+                return (
+                  <button className={`rounded-xl border border-l-4 bg-white p-4 text-left shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 ${statusBorderClass(appointment.status)}`} key={appointment.id} onClick={() => setDraftAppointment(appointment)} type="button">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-black text-slate-500">{formatAppointmentTimeRange(appointment)}{appointment.durationMinutes ? ` · ${appointment.durationMinutes / 60}h` : ""}</p>
+                        <h3 className="mt-1 text-base font-black text-slate-950">{appointment.client}</h3>
+                        <p className="mt-1 text-sm font-bold text-slate-500">{appointment.service} · {appointment.team}</p>
+                        {address ? <p className="mt-2 text-sm font-bold text-slate-600">{address}</p> : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge tone={statusTone(appointment.status)}>{statusLabel(appointment.status, labels)}</Badge>
+                        {appointment.price ? <Badge tone="gray">{appointment.price}</Badge> : null}
+                        {appointmentCompactRecurrenceLabel(appointment) ? <Badge tone={recurrenceTone(appointment.recurrence)}>{appointmentCompactRecurrenceLabel(appointment)}</Badge> : null}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+              {selectedDayViewAppointments.length === 0 ? <button className="rounded-xl border border-dashed border-cyan-200 bg-cyan-50/50 p-5 text-left text-sm font-black text-primary" onClick={() => openNewAppointment(selectedDayForView)} type="button">{labels.newAppointment}</button> : null}
+            </div>
+          ) : null}
+
+          {calendarView === "agenda" ? (
+            <div className="grid gap-3">
+              {Array.from(new Set(filteredAppointments.map((appointment) => appointment.date))).map((date) => (
+                <section className="grid gap-2" key={date}>
+                  <h3 className="text-xs font-black uppercase tracking-wide text-slate-400">{new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(parseDateKey(date))}</h3>
+                  {filteredAppointments.filter((appointment) => appointment.date === date).map((appointment) => {
+                    const client = clientByName.get(appointment.client);
+                    const address = clientPrimaryAddress(client);
+                    return (
+                      <button className={`grid gap-3 rounded-xl border border-l-4 bg-white p-3 text-left shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 lg:grid-cols-[7rem_minmax(0,1fr)_auto] lg:items-center ${statusBorderClass(appointment.status)}`} key={appointment.id} onClick={() => setDraftAppointment(appointment)} type="button">
+                        <span className="text-sm font-black text-slate-950">{formatAppointmentTimeRange(appointment)}</span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-black text-slate-950">{appointment.client}</span>
+                          <span className="block truncate text-xs font-bold text-slate-500">{appointment.service} · {appointment.team}{address ? ` · ${address}` : ""}</span>
+                        </span>
+                        <span className="flex flex-wrap gap-2">
+                          <Badge tone={statusTone(appointment.status)}>{statusLabel(appointment.status, labels)}</Badge>
+                          {appointmentCompactRecurrenceLabel(appointment) ? <Badge tone="gray">{appointmentCompactRecurrenceLabel(appointment)}</Badge> : null}
+                          {appointment.price ? <Badge tone="gray">{appointment.price}</Badge> : null}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </section>
+              ))}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

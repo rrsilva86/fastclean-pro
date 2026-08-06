@@ -116,6 +116,12 @@ export function SystemSettingsManager({ labels }: { labels: SystemSettingsLabels
   const [passwordStatus, setPasswordStatus] = useState<"idle" | "saved" | "mismatch" | "short" | "invalid">("idle");
   const [emailStatus, setEmailStatus] = useState<"idle" | "saved" | "invalid" | "in_use" | "password_invalid">("idle");
   const [currentLoginEmail, setCurrentLoginEmail] = useState("");
+  const [securityForm, setSecurityForm] = useState({
+    currentPassword: "",
+    newLoginEmail: "",
+    newPassword: "",
+    confirmPassword: ""
+  });
 
   useEffect(() => {
     setSettings(settingFromStorage());
@@ -156,13 +162,15 @@ export function SystemSettingsManager({ labels }: { labels: SystemSettingsLabels
     );
   }
 
+  function updateSecurityField(key: keyof typeof securityForm, value: string) {
+    setSecurityForm((current) => ({ ...current, [key]: value }));
+  }
+
   async function handlePasswordChange(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const currentPassword = String(formData.get("currentPassword") ?? "");
-    const nextPassword = String(formData.get("newPassword") ?? "");
-    const confirmPassword = String(formData.get("confirmPassword") ?? "");
+    const currentPassword = securityForm.currentPassword;
+    const nextPassword = securityForm.newPassword;
+    const confirmPassword = securityForm.confirmPassword;
 
     if (nextPassword.length < 8) {
       setPasswordStatus("short");
@@ -180,16 +188,14 @@ export function SystemSettingsManager({ labels }: { labels: SystemSettingsLabels
       return;
     }
 
-    form.reset();
+    setSecurityForm((current) => ({ ...current, newPassword: "", confirmPassword: "" }));
     setPasswordStatus("saved");
   }
 
   async function handleEmailChange(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const nextEmail = String(formData.get("newLoginEmail") ?? "");
-    const currentPassword = String(formData.get("emailCurrentPassword") ?? "");
+    const nextEmail = securityForm.newLoginEmail;
+    const currentPassword = securityForm.currentPassword;
     const result = await changeUserEmail(readCurrentUserEmail(), currentPassword, nextEmail);
 
     if (!result.ok) {
@@ -199,7 +205,7 @@ export function SystemSettingsManager({ labels }: { labels: SystemSettingsLabels
 
     document.cookie = `fastclean_user_email=${encodeURIComponent(result.email)}; path=/; max-age=86400; SameSite=Lax`;
     setCurrentLoginEmail(result.email);
-    form.reset();
+    setSecurityForm((current) => ({ ...current, newLoginEmail: "" }));
     setEmailStatus("saved");
   }
 
@@ -240,11 +246,29 @@ export function SystemSettingsManager({ labels }: { labels: SystemSettingsLabels
             <p className="mt-1 text-sm font-semibold text-slate-500">{labels.securityDescription}</p>
           </div>
         </CardHeader>
-        <CardContent>
-          <form className="grid gap-4 border-b border-slate-100 pb-5 lg:grid-cols-3" onSubmit={handleEmailChange}>
+        <CardContent className="grid gap-5">
+          <div className="grid gap-4 lg:grid-cols-3">
             <Input label={labels.currentLoginEmail} name="currentLoginEmail" readOnly value={currentLoginEmail} />
-            <Input autoComplete="email" label={labels.newLoginEmail} name="newLoginEmail" required type="email" />
-            <Input autoComplete="current-password" label={labels.currentPassword} name="emailCurrentPassword" required type="password" />
+            <Input
+              autoComplete="current-password"
+              label={labels.currentPassword}
+              name="currentPassword"
+              onChange={(event) => updateSecurityField("currentPassword", event.target.value)}
+              required
+              type="password"
+              value={securityForm.currentPassword}
+            />
+          </div>
+          <form className="grid gap-4 border-t border-slate-100 pt-5 lg:grid-cols-2" onSubmit={handleEmailChange}>
+            <Input
+              autoComplete="email"
+              label={labels.newLoginEmail}
+              name="newLoginEmail"
+              onChange={(event) => updateSecurityField("newLoginEmail", event.target.value)}
+              required
+              type="email"
+              value={securityForm.newLoginEmail}
+            />
             <div className="flex flex-wrap items-center gap-3 lg:col-span-3">
               <Button type="submit">
                 <Mail className="h-4 w-4" />
@@ -256,10 +280,25 @@ export function SystemSettingsManager({ labels }: { labels: SystemSettingsLabels
               {emailStatus === "password_invalid" ? <StatusPill tone="red" label={labels.currentPasswordInvalid} /> : null}
             </div>
           </form>
-          <form className="grid gap-4 pt-5 lg:grid-cols-3" onSubmit={handlePasswordChange}>
-            <Input autoComplete="current-password" label={labels.currentPassword} name="currentPassword" required type="password" />
-            <Input autoComplete="new-password" label={labels.newPassword} name="newPassword" required type="password" />
-            <Input autoComplete="new-password" label={labels.confirmPassword} name="confirmPassword" required type="password" />
+          <form className="grid gap-4 border-t border-slate-100 pt-5 lg:grid-cols-2" onSubmit={handlePasswordChange}>
+            <Input
+              autoComplete="new-password"
+              label={labels.newPassword}
+              name="newPassword"
+              onChange={(event) => updateSecurityField("newPassword", event.target.value)}
+              required
+              type="password"
+              value={securityForm.newPassword}
+            />
+            <Input
+              autoComplete="new-password"
+              label={labels.confirmPassword}
+              name="confirmPassword"
+              onChange={(event) => updateSecurityField("confirmPassword", event.target.value)}
+              required
+              type="password"
+              value={securityForm.confirmPassword}
+            />
             <div className="flex flex-wrap items-center gap-3 lg:col-span-3">
               <Button type="submit">
                 <LockKeyhole className="h-4 w-4" />

@@ -1,5 +1,5 @@
 import { LoginForm } from "@/components/auth/login-form";
-import { BarChart3, CalendarCheck, CreditCard, Sparkles, Users } from "lucide-react";
+import { BarChart3, CalendarCheck, CreditCard, Download, Sparkles, Users } from "lucide-react";
 import Link from "next/link";
 import { localeLabels, locales } from "@/config/locales";
 import { createTranslator, getDictionary } from "@/lib/i18n/dictionaries";
@@ -12,6 +12,7 @@ export default async function LoginPage({ params }: { params: Promise<{ locale: 
   return (
     <main className="min-h-screen bg-white px-5 py-5">
       <div className="mx-auto flex max-w-7xl justify-end gap-2">
+        <VersionBadge />
         {locales.map((item) => (
           <Link
             className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-black transition ${
@@ -56,6 +57,12 @@ export default async function LoginPage({ params }: { params: Promise<{ locale: 
             }}
             locale={locale}
           />
+          <nav className="mt-6 flex justify-center gap-4 text-xs font-bold text-slate-400" aria-label={t("install.publicNavigation")}>
+            <Link className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 transition hover:bg-cyan-50 hover:text-primary" href="/install">
+              <Download className="h-3.5 w-3.5" />
+              {t("install.installApp")}
+            </Link>
+          </nav>
           <p className="sr-only">
             {t("auth.language")}: {localeLabels[locale as keyof typeof localeLabels]}
           </p>
@@ -93,9 +100,6 @@ export default async function LoginPage({ params }: { params: Promise<{ locale: 
           </div>
         </section>
       </div>
-      <footer className="mx-auto max-w-7xl pb-2 text-right">
-        <VersionBadge />
-      </footer>
     </main>
   );
 }

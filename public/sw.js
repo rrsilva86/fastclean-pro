@@ -1,9 +1,10 @@
 const CACHE_NAME = "fastclean-pro-shell-v1";
 const APP_SHELL = [
   "/",
-  "/pt/dashboard",
-  "/pt/appointments",
-  "/pt/clients",
+  "/install",
+  "/pt/login",
+  "/en/login",
+  "/es/login",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png"
@@ -41,6 +42,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  const shouldCache = APP_SHELL.includes(url.pathname) || url.pathname.startsWith("/icons/");
+
+  if (!shouldCache) {
+    return;
+  }
+
   event.respondWith(
     fetch(request)
       .then((response) => {
@@ -48,6 +55,6 @@ self.addEventListener("fetch", (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined);
         return response;
       })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match("/pt/dashboard")))
+      .catch(() => caches.match(request).then((cached) => cached || caches.match("/pt/login")))
   );
 });

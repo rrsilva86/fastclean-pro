@@ -1,0 +1,16 @@
+export const appBranding = {
+  name: "FastClean Pro",
+  shortName: "FastClean",
+  description: "FastClean Pro SaaS platform",
+  pwaDescription: "FastClean Pro app for cleaning company operations.",
+  logoPath: "/icons/icon-192.png",
+  icon192Path: "/icons/icon-192.png",
+  icon512Path: "/icons/icon-512.png",
+  appleTouchIconPath: "/icons/apple-touch-icon.png",
+  manifestPath: "/manifest.webmanifest",
+  installPath: "/install",
+  defaultLoginPath: "/pt/login",
+  defaultStartUrl: "/pt/dashboard",
+  themeColor: "#06B6D4",
+  backgroundColor: "#F8FAFC"
+} as const;
