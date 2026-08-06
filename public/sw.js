@@ -1,4 +1,4 @@
-const CACHE_NAME = "fastclean-pro-shell-v1";
+const CACHE_NAME = "fastclean-pro-shell-v2";
 const APP_SHELL = [
   "/",
   "/install",
@@ -7,7 +7,12 @@ const APP_SHELL = [
   "/es/login",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
-  "/icons/icon-512.png"
+  "/icons/icon-512.png",
+  "/icons/maskable-icon-192.png",
+  "/icons/maskable-icon-512.png",
+  "/icons/apple-touch-icon.png",
+  "/favicon.ico",
+  "/favicon.png"
 ];
 
 self.addEventListener("install", (event) => {

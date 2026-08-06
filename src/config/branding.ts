@@ -6,11 +6,15 @@ export const appBranding = {
   logoPath: "/icons/icon-192.png",
   icon192Path: "/icons/icon-192.png",
   icon512Path: "/icons/icon-512.png",
+  maskableIcon192Path: "/icons/maskable-icon-192.png",
+  maskableIcon512Path: "/icons/maskable-icon-512.png",
   appleTouchIconPath: "/icons/apple-touch-icon.png",
+  faviconPath: "/favicon.ico",
+  faviconPngPath: "/favicon.png",
   manifestPath: "/manifest.webmanifest",
   installPath: "/install",
   defaultLoginPath: "/pt/login",
-  defaultStartUrl: "/pt/dashboard",
+  defaultStartUrl: "/",
   themeColor: "#06B6D4",
   backgroundColor: "#F8FAFC"
 } as const;

@@ -1,10 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="FastClean Pro">
-  <rect width="512" height="512" fill="#F8FAFC"/>
-  <rect x="52" y="52" width="408" height="408" rx="124" fill="#06B6D4"/>
-  <circle cx="256" cy="250" r="158" fill="#14B8A6"/>
-  <rect x="144" y="224" width="42" height="120" rx="21" fill="#FFFFFF"/>
-  <rect x="211" y="178" width="42" height="166" rx="21" fill="#FFFFFF"/>
-  <rect x="278" y="205" width="42" height="139" rx="21" fill="#FFFFFF"/>
-  <rect x="345" y="245" width="42" height="99" rx="21" fill="#FFFFFF"/>
-  <circle cx="365" cy="162" r="15" fill="#99F6E4"/>
+  <rect width="512" height="512" fill="#31D06C"/>
+  <rect x="139" y="214" width="38" height="134" rx="19" fill="#FFFFFF"/>
+  <rect x="207" y="156" width="38" height="192" rx="19" fill="#FFFFFF"/>
+  <rect x="275" y="192" width="38" height="156" rx="19" fill="#FFFFFF"/>
+  <rect x="343" y="236" width="38" height="112" rx="19" fill="#FFFFFF"/>
+  <path d="M132 368H392" stroke="#FFFFFF" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="371" cy="142" r="15" fill="#E8FFF1"/>
 </svg>

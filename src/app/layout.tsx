@@ -15,6 +15,8 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: appBranding.faviconPath, sizes: "32x32", type: "image/x-icon" },
+      { url: appBranding.faviconPngPath, sizes: "32x32", type: "image/png" },
       { url: appBranding.icon192Path, sizes: "192x192", type: "image/png" },
       { url: appBranding.icon512Path, sizes: "512x512", type: "image/png" }
     ],
