@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Input } from "@/components/design-system";
-import { findUserByCredentials } from "@/lib/auth/app-users";
+import { findUserByCredentialsWithOverrides, readRemoteEmailOverrides, readRemotePasswordOverrides } from "@/lib/auth/app-users";
 import { initialPlatformAccounts } from "@/lib/platform/platform-accounts";
 import { buildScopedStorageKey } from "@/lib/storage/local-records";
 
@@ -53,12 +53,14 @@ export function LoginForm({ labels, locale }: { labels: LoginLabels; locale: str
     return sessionToken.startsWith("tenant_") && (!companyAccount || companyAccount.billingStatus === "suspended" || companyAccount.billingStatus === "deleted");
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
-    const account = findUserByCredentials(email, password);
+    const passwordOverrides = await readRemotePasswordOverrides();
+    const emailOverrides = await readRemoteEmailOverrides();
+    const account = await findUserByCredentialsWithOverrides(email, password, passwordOverrides, emailOverrides);
 
     if (!account) {
       setError(labels.invalidLogin);

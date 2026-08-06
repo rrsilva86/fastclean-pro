@@ -30,18 +30,18 @@ export function LanguageSwitcher({ locale, label }: { locale: Locale; label: str
     <div className="relative">
       <button
         aria-label={label}
-        className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white text-xl shadow-soft transition hover:border-cyan-200 hover:bg-cyan-50"
+        className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-base shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50"
         onClick={() => setOpen((value) => !value)}
         type="button"
       >
         {localeFlags[currentLocale]}
       </button>
       {open ? (
-        <div className="absolute left-0 top-12 z-30 grid gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-premium">
+        <div className="absolute left-0 top-10 z-30 grid gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-premium">
           {locales.map((item) => (
             <Link
               aria-label={`${label}: ${item}`}
-              className="grid h-10 w-10 place-items-center rounded-lg text-xl transition hover:bg-cyan-50"
+              className="grid h-8 w-8 place-items-center rounded-md text-base transition hover:bg-cyan-50"
               href={getLocalizedPath(item)}
               key={item}
               onClick={() => setOpen(false)}

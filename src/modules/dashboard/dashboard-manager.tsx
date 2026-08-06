@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, CalendarDays, CheckCircle2, Clock3, DollarSign, Target, TrendingDown, TrendingUp, Users, XCircle } from "lucide-react";
 import { Badge, Card, CardContent, CardHeader, EmptyState, StatCard } from "@/components/design-system";
 import { PageHeader } from "@/components/layout/page-header";
-import { readLocalRecords } from "@/lib/storage/local-records";
+import { readLocalRecords, readRemoteRecords } from "@/lib/storage/local-records";
 import { defaultClients, type ClientRecord } from "@/modules/clients/types";
 
 type AppointmentRecord = {
@@ -103,8 +103,12 @@ export function DashboardManager({ labels }: { labels: DashboardLabels; locale: 
   const { start, end } = weekRange(today);
 
   useEffect(() => {
-    setAppointments(readLocalRecords<AppointmentRecord>(appointmentsStorageKey, []));
-    setClients(readLocalRecords<ClientRecord>(clientsStorageKey, defaultClients));
+    const localAppointments = readLocalRecords<AppointmentRecord>(appointmentsStorageKey, []);
+    const localClients = readLocalRecords<ClientRecord>(clientsStorageKey, defaultClients);
+    setAppointments(localAppointments);
+    setClients(localClients);
+    readRemoteRecords(appointmentsStorageKey, localAppointments).then(setAppointments);
+    readRemoteRecords(clientsStorageKey, localClients).then(setClients);
   }, []);
 
   const todayAppointments = appointments.filter((appointment) => appointment.date === todayKey);
@@ -153,26 +157,24 @@ export function DashboardManager({ labels }: { labels: DashboardLabels; locale: 
   ];
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       <PageHeader title={labels.title} subtitle={labels.subtitle} />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-3 2xl:grid-cols-6">
         {metrics.map((metric) => (
           <StatCard detail={metric.detail} icon={metric.icon} key={metric.label} label={metric.label} tone={metric.tone} value={metric.value} />
         ))}
-      </div>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {operations.map((item) => {
           const Icon = item.icon;
           return (
             <Card key={item.label}>
-              <CardContent className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-50 text-slate-500 ring-1 ring-slate-100">
-                    <Icon className="h-5 w-5" />
+              <CardContent className="flex min-h-[118px] items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="grid h-9 w-9 place-items-center rounded-lg bg-slate-50 text-slate-500 ring-1 ring-slate-100">
+                    <Icon className="h-4 w-4" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-500">{item.label}</p>
-                    <p className="mt-1 text-2xl font-black text-slate-950">{item.value}</p>
+                    <p className="text-xs font-black text-slate-500">{item.label}</p>
+                    <p className="mt-5 text-2xl font-black text-slate-950">{item.value}</p>
                   </div>
                 </div>
                 <Badge tone={item.tone}>{labels.today}</Badge>
@@ -191,31 +193,31 @@ export function DashboardManager({ labels }: { labels: DashboardLabels; locale: 
             <Badge tone="blue">{labels.forecast}</Badge>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-6">
-          <div className="rounded-2xl bg-gradient-to-br from-cyan-50 via-white to-teal-50 p-5 ring-1 ring-cyan-100">
+        <CardContent className="grid gap-4">
+          <div className="rounded-xl bg-gradient-to-br from-cyan-50 via-white to-teal-50 p-4 ring-1 ring-cyan-100">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-black uppercase tracking-wide text-cyan-700">{labels.projectedMonthRevenue}</p>
-                <p className="mt-3 text-4xl font-black tracking-tight text-slate-950">{currencyFormatter.format(projectedRevenue)}</p>
-                <p className="mt-2 text-sm font-semibold text-slate-500">{labels.forecastBasedOnScheduledCleanings}</p>
+                <p className="text-xs font-black uppercase tracking-wide text-cyan-700">{labels.projectedMonthRevenue}</p>
+                <p className="mt-2 text-3xl font-black tracking-tight text-slate-950">{currencyFormatter.format(projectedRevenue)}</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">{labels.forecastBasedOnScheduledCleanings}</p>
               </div>
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-cyan-600 shadow-soft ring-1 ring-cyan-100">
-                <Target className="h-6 w-6" />
+              <div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-cyan-600 shadow-sm ring-1 ring-cyan-100">
+                <Target className="h-5 w-5" />
               </div>
             </div>
-            <div className="mt-6">
+            <div className="mt-4">
               <div className="flex items-center justify-between text-xs font-black uppercase tracking-wide text-slate-500">
                 <span>{labels.monthlyGoal}</span>
                 <span>{targetPercent}%</span>
               </div>
-              <div className="mt-2 h-3 overflow-hidden rounded-full bg-white ring-1 ring-cyan-100">
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-white ring-1 ring-cyan-100">
                 <div className="h-full rounded-full bg-primary" style={{ width: `${targetPercent}%` }} />
               </div>
             </div>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <div className="grid gap-4">
+            <div className="grid gap-3">
               <div>
                 <h3 className="text-sm font-black text-slate-950">{labels.revenueBreakdown}</h3>
                 <p className="mt-1 text-xs font-semibold text-slate-500">{labels.revenueBreakdownDescription}</p>
@@ -225,7 +227,7 @@ export function DashboardManager({ labels }: { labels: DashboardLabels; locale: 
               ))}
             </div>
 
-            <div className="grid gap-4">
+            <div className="grid gap-3">
               <div>
                 <h3 className="text-sm font-black text-slate-950">{labels.expenseBreakdown}</h3>
                 <p className="mt-1 text-xs font-semibold text-slate-500">{labels.expenseBreakdownDescription}</p>
@@ -254,9 +256,9 @@ export function DashboardManager({ labels }: { labels: DashboardLabels; locale: 
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {actionQueue.map(([label, value]) => (
-            <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 transition hover:border-cyan-100 hover:bg-cyan-50/40" key={label}>
-              <p className="text-sm font-bold text-slate-600">{label}</p>
-              <p className="mt-2 text-3xl font-black text-primary">{value}</p>
+            <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3 transition hover:border-cyan-100 hover:bg-cyan-50/40" key={label}>
+              <p className="text-xs font-bold text-slate-600">{label}</p>
+              <p className="mt-1 text-2xl font-black text-primary">{value}</p>
             </div>
           ))}
         </CardContent>
@@ -268,12 +270,12 @@ export function DashboardManager({ labels }: { labels: DashboardLabels; locale: 
 
 function BarRow({ color, label, value, width }: { color: string; label: string; value: string; width: string }) {
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+    <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-black text-slate-700">{label}</p>
-        <p className="text-sm font-black text-slate-950">{value}</p>
+        <p className="text-xs font-black text-slate-700">{label}</p>
+        <p className="text-xs font-black text-slate-950">{value}</p>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white ring-1 ring-slate-100">
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white ring-1 ring-slate-100">
         <div className={`h-full rounded-full ${color}`} style={{ width }} />
       </div>
     </div>
@@ -284,12 +286,12 @@ function SummaryCard({ icon, label, subValue, tone = "default", value }: { icon?
   const toneClass = tone === "red" ? "border-red-100 bg-red-50/50" : tone === "green" ? "border-green-100 bg-green-50/50" : "border-slate-100 bg-white";
 
   return (
-    <div className={`rounded-xl border p-4 ${toneClass}`}>
+    <div className={`rounded-lg border p-3 ${toneClass}`}>
       <div className="flex items-center gap-2">
         {icon}
         <p className="text-xs font-black uppercase tracking-wide text-slate-400">{label}</p>
       </div>
-      <p className="mt-2 text-xl font-black text-slate-950">{value}</p>
+      <p className="mt-1.5 text-lg font-black text-slate-950">{value}</p>
       {subValue ? <p className="mt-1 text-xs font-bold text-green-600">{subValue}</p> : null}
     </div>
   );

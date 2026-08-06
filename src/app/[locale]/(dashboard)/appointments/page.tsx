@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { createTranslator, getDictionary } from "@/lib/i18n/dictionaries";
 import { AppointmentsManager } from "@/modules/appointments/appointments-manager";
+import type { ClientsLabels } from "@/modules/clients/clients-manager";
 
 export default async function AppointmentsPage({
   params,
@@ -11,62 +12,27 @@ export default async function AppointmentsPage({
 }) {
   const { locale } = await params;
   const { month } = await searchParams;
-  const t = createTranslator(getDictionary(locale));
+  const dictionary = getDictionary(locale);
+  const t = createTranslator(dictionary);
+  const clientLabels = {
+    ...dictionary.clients,
+    cancel: t("common.cancel"),
+    delete: t("common.delete"),
+    details: t("common.details"),
+    edit: t("common.edit"),
+    saveChanges: t("common.saveChanges")
+  } as ClientsLabels;
 
   return (
     <div className="grid gap-6">
       <PageHeader title={t("appointments.title")} subtitle={t("appointments.subtitle")} />
       <AppointmentsManager
-        clientLabels={{
-          addAddress: t("clients.addAddress"),
-          addClient: t("clients.addClient"),
-          addressDetails: t("clients.addressDetails"),
-          addressLabel: t("clients.addressLabel"),
-          addressSearch: t("clients.addressSearch"),
-          addressVerified: t("clients.addressVerified"),
-          birthday: t("clients.birthday"),
-          cancel: t("common.cancel"),
-          city: t("clients.city"),
-          communicationPreferences: t("clients.communicationPreferences"),
-          delete: t("common.delete"),
-          deleteClient: t("clients.deleteClient"),
-          deleteClientConfirm: t("clients.deleteClientConfirm"),
-          details: t("common.details"),
-          edit: t("common.edit"),
-          editClient: t("clients.editClient"),
-          email: t("clients.email"),
-          emailOptIn: t("clients.emailOptIn"),
-          emptyTitle: t("clients.emptyTitle"),
-          emptyDescription: t("clients.emptyDescription"),
-          joinedDate: t("clients.joinedDate"),
-          leadInformation: t("clients.leadInformation"),
-          leadProfile: t("clients.leadProfile"),
-          leadSource: t("clients.leadSource"),
-          name: t("clients.name"),
-          nickname: t("clients.nickname"),
-          noSecondaryPayment: t("clients.noSecondaryPayment"),
-          paymentInformation: t("clients.paymentInformation"),
-          paymentNotes: t("clients.paymentNotes"),
-          phone: t("clients.phone"),
-          postalCode: t("clients.postalCode"),
-          primaryPaymentMethod: t("clients.primaryPaymentMethod"),
-          property: t("clients.property"),
-          referralClient: t("clients.referralClient"),
-          saveChanges: t("common.saveChanges"),
-          saveClient: t("clients.saveClient"),
-          searchAddress: t("clients.searchAddress"),
-          secondaryPaymentMethod: t("clients.secondaryPaymentMethod"),
-          selectAddress: t("clients.selectAddress"),
-          smsOptIn: t("clients.smsOptIn"),
-          state: t("clients.state"),
-          street: t("clients.street"),
-          tag: t("clients.tag"),
-          viewProfile: t("clients.viewProfile")
-        }}
+        clientLabels={clientLabels}
         locale={locale}
         month={month}
         labels={{
           cancel: t("common.cancel"),
+          canceled: t("calendar.canceled"),
           changeRecurringDescription: t("appointments.changeRecurringDescription"),
           changeRecurringFollowing: t("appointments.changeRecurringFollowing"),
           changeRecurringOnly: t("appointments.changeRecurringOnly"),
@@ -76,6 +42,7 @@ export default async function AppointmentsPage({
           clientCommunicationUnavailable: t("appointments.clientCommunicationUnavailable"),
           communication: t("appointments.communication"),
           date: t("common.date"),
+          deleteAppointment: t("appointments.deleteAppointment"),
           departureNotice: t("appointments.departureNotice"),
           duration: t("appointments.duration"),
           endsAt: t("appointments.endsAt"),
@@ -118,6 +85,8 @@ export default async function AppointmentsPage({
           time: t("common.time"),
           appointmentNotice: t("appointments.appointmentNotice"),
           notificationSent: t("appointments.notificationSent"),
+          notificationFailed: t("appointments.notificationFailed"),
+          notificationSending: t("appointments.notificationSending"),
           selectClientFirst: t("appointments.selectClientFirst"),
           scheduleConflict: t("appointments.scheduleConflict"),
           bufferTime: t("appointments.bufferTime")

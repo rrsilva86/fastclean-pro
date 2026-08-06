@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Route, Trash2, Users } from "lucide-react";
 import { Badge, Button, Card, CardContent, EmptyState, Input, Modal } from "@/components/design-system";
-import { readLocalRecords, writeLocalRecords } from "@/lib/storage/local-records";
+import { readLocalRecords, readRemoteRecords, writeLocalRecords } from "@/lib/storage/local-records";
 import { defaultEmployees, type EmployeeRecord } from "@/modules/employees/types";
 import { defaultTeams, type TeamRecord } from "@/modules/teams/types";
 
@@ -39,8 +39,12 @@ export function TeamsManager({ labels }: { labels: TeamsLabels }) {
   const [routeTeam, setRouteTeam] = useState<TeamRecord | null>(null);
 
   useEffect(() => {
-    setEmployees(readLocalRecords(employeesStorageKey, defaultEmployees));
-    setTeams(readLocalRecords(teamsStorageKey, defaultTeams));
+    const localEmployees = readLocalRecords(employeesStorageKey, defaultEmployees);
+    const localTeams = readLocalRecords(teamsStorageKey, defaultTeams);
+    setEmployees(localEmployees);
+    setTeams(localTeams);
+    readRemoteRecords(employeesStorageKey, localEmployees).then(setEmployees);
+    readRemoteRecords(teamsStorageKey, localTeams).then(setTeams);
   }, []);
 
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);

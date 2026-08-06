@@ -24,14 +24,14 @@ export function StatCard({
 
   return (
     <Card>
-      <CardContent className="flex items-start justify-between gap-4">
+      <CardContent className="flex min-h-[118px] items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-slate-500">{label}</p>
-          <p className="mt-3 text-3xl font-black tracking-tight text-slate-950">{value}</p>
-          {detail ? <p className="mt-2 text-xs font-medium text-slate-400">{detail}</p> : null}
+          <p className="text-xs font-black text-slate-500">{label}</p>
+          <p className="mt-5 text-2xl font-black tracking-tight text-slate-950">{value}</p>
+          {detail ? <p className="mt-1 text-xs font-semibold text-slate-400">{detail}</p> : null}
         </div>
-        <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ring-1 ${toneClass}`}>
-          <Icon className="h-5 w-5" />
+        <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ring-1 ${toneClass}`}>
+          <Icon className="h-4 w-4" />
         </div>
       </CardContent>
     </Card>

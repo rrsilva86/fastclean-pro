@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <section
-      className={`rounded-xl border border-slate-200/80 bg-app-card shadow-soft transition duration-200 hover:border-cyan-100 hover:shadow-premium ${className}`}
+      className={`rounded-lg border border-slate-200/80 bg-app-card shadow-sm transition duration-200 hover:border-cyan-100 hover:shadow-soft ${className}`}
     >
       {children}
     </section>
@@ -11,9 +11,9 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
 }
 
 export function CardHeader({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`border-b border-slate-100 px-5 py-4 sm:px-6 ${className}`}>{children}</div>;
+  return <div className={`border-b border-slate-100 px-4 py-3 ${className}`}>{children}</div>;
 }
 
 export function CardContent({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`p-5 sm:p-6 ${className}`}>{children}</div>;
+  return <div className={`p-4 ${className}`}>{children}</div>;
 }

@@ -19,11 +19,11 @@ export function LogoutButton({ label, locale }: { label: string; locale: string 
 
   return (
     <button
-      className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-soft transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
       onClick={logout}
       type="button"
     >
-      <LogOut className="h-4 w-4" />
+      <LogOut className="h-3.5 w-3.5" />
       {label}
     </button>
   );

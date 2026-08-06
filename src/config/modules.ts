@@ -9,6 +9,7 @@ export const appModules = [
   "employees",
   "invoices",
   "payroll",
+  "calculator",
   "messages",
   "reports",
   "settings",
@@ -73,6 +74,12 @@ export const featureModules: Record<AppModule, FeatureModule> = {
     translationKey: "nav.payroll",
     status: "active",
     requiredPermission: "payroll.read"
+  },
+  calculator: {
+    code: "calculator",
+    translationKey: "nav.calculator",
+    status: "active",
+    requiredPermission: "calculator.read"
   },
   messages: {
     code: "messages",

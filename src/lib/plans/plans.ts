@@ -44,6 +44,7 @@ export const subscriptionPlans: Record<PlanCode, SubscriptionPlan> = {
       "payroll",
       "messages",
       "reports",
+      "settings",
       "crm",
       "documents"
     ],

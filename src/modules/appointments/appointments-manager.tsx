@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CalendarCheck, ChevronLeft, ChevronRight, Mail, MapPinned, MessageSquare, Plus, Trash2, UserPlus, X } from "lucide-react";
 import { Badge, Button, Card, CardContent, CardHeader, Input, Modal, Table, Td, Th } from "@/components/design-system";
-import { readLocalRecords, writeLocalRecords } from "@/lib/storage/local-records";
+import { readLocalRecords, readRemoteRecords, writeLocalRecords } from "@/lib/storage/local-records";
 import { defaultClients, type ClientRecord } from "@/modules/clients/types";
 import { ClientForm, type ClientsLabels } from "@/modules/clients/clients-manager";
 import { defaultCleaningServiceTypes, defaultExtraServices } from "@/modules/services/types";
+import { defaultAppointmentMessageTemplates, type AppointmentMessageTemplateKey, type AppointmentMessageTemplates } from "@/lib/highlevel/message-templates";
 
-type AppointmentStatus = "scheduled" | "started" | "finished" | "paid";
+type AppointmentStatus = "scheduled" | "started" | "finished" | "paid" | "canceled";
 
 type AppointmentRecord = {
   id: string;
@@ -31,11 +32,13 @@ type AppointmentRecord = {
 
 type AppointmentLabels = {
   cancel: string;
+  canceled: string;
   checkIn: string;
   client: string;
   clientCommunicationUnavailable: string;
   communication: string;
   date: string;
+  deleteAppointment: string;
   departureNotice: string;
   duration: string;
   endsAt: string;
@@ -78,6 +81,8 @@ type AppointmentLabels = {
   time: string;
   appointmentNotice: string;
   notificationSent: string;
+  notificationFailed: string;
+  notificationSending: string;
   selectClientFirst: string;
   scheduleConflict: string;
   bufferTime: string;
@@ -89,6 +94,7 @@ type AppointmentLabels = {
 
 const storageKey = "fastclean_appointments";
 const clientsStorageKey = "fastclean_clients";
+const settingsStorageKey = "fastclean_system_settings";
 const appointmentBufferMinutes = 30;
 const fieldLabelClass = "grid min-w-0 gap-2 text-sm font-medium text-slate-700";
 const selectClass = "h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-cyan-100";
@@ -272,11 +278,11 @@ function createDefaultAppointments(monthDate: Date): AppointmentRecord[] {
 }
 
 function statusLabel(status: AppointmentStatus, labels: AppointmentLabels) {
-  return status === "started" ? labels.started : status === "finished" ? labels.finished : status === "paid" ? labels.paid : labels.scheduled;
+  return status === "started" ? labels.started : status === "finished" ? labels.finished : status === "paid" ? labels.paid : status === "canceled" ? labels.canceled : labels.scheduled;
 }
 
 function statusTone(status: AppointmentStatus) {
-  return status === "started" ? "yellow" : status === "finished" ? "green" : status === "paid" ? "teal" : "blue";
+  return status === "started" ? "yellow" : status === "finished" ? "green" : status === "paid" ? "teal" : status === "canceled" ? "red" : "blue";
 }
 
 function recurrenceLabel(recurrence: string, labels: AppointmentLabels) {
@@ -353,6 +359,21 @@ function normalizeAppointments(records: AppointmentRecord[]) {
   }));
 }
 
+function readAppointmentMessageTemplates() {
+  if (typeof window === "undefined") {
+    return defaultAppointmentMessageTemplates;
+  }
+
+  try {
+    const sessionToken = decodeURIComponent(document.cookie.split("; ").find((item) => item.startsWith("fastclean_session="))?.split("=")[1] ?? "");
+    const scopedKey = sessionToken ? `${sessionToken}:${settingsStorageKey}` : settingsStorageKey;
+    const settings = JSON.parse(window.localStorage.getItem(scopedKey) ?? "{}") as { appointmentMessageTemplates?: Partial<AppointmentMessageTemplates> };
+    return { ...defaultAppointmentMessageTemplates, ...settings.appointmentMessageTemplates };
+  } catch {
+    return defaultAppointmentMessageTemplates;
+  }
+}
+
 function AppointmentForm({
   appointment,
   appointments,
@@ -361,6 +382,7 @@ function AppointmentForm({
   onOpenNewClient,
   onCancel,
   onCheckIn,
+  onDelete,
   onSubmit,
   title
 }: {
@@ -371,6 +393,7 @@ function AppointmentForm({
   onOpenNewClient: () => void;
   onCancel: () => void;
   onCheckIn?: () => void;
+  onDelete?: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   title: string;
 }) {
@@ -380,6 +403,7 @@ function AppointmentForm({
   const [selectedTime, setSelectedTime] = useState(appointment.time);
   const [selectedDurationMinutes, setSelectedDurationMinutes] = useState(appointment.durationMinutes);
   const [sentNotifications, setSentNotifications] = useState<string[]>([]);
+  const [sendingNotifications, setSendingNotifications] = useState<string[]>([]);
   const [notificationError, setNotificationError] = useState("");
   const liveAppointment = { ...appointment, time: selectedTime, durationMinutes: selectedDurationMinutes };
   const hasConflict = appointmentHasConflict(liveAppointment, appointments);
@@ -401,7 +425,7 @@ function AppointmentForm({
     setSelectedExtraService("");
   }
 
-  function markNotificationSent(key: string, channel: "sms" | "email") {
+  async function markNotificationSent(key: AppointmentMessageTemplateKey, channel: "sms" | "email") {
     if (!selectedClient) {
       setNotificationError(labels.selectClientFirst);
       return;
@@ -427,8 +451,51 @@ function AppointmentForm({
       return;
     }
 
+    if (channel === "sms") {
+      const notificationKey = `${key}:sms`;
+      const templates = readAppointmentMessageTemplates();
+      setNotificationError("");
+      setSendingNotifications((items) => (items.includes(notificationKey) ? items : [...items, notificationKey]));
+
+      const response = await fetch("/api/highlevel/appointment-sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: key,
+          template: templates[key],
+          companyName: "FastClean Pro",
+          client: {
+            id: selectedClient.id,
+            name: selectedClient.name,
+            displayName: selectedClient.displayName,
+            companyName: selectedClient.companyName,
+            phone: selectedClient.phone,
+            email: selectedClient.email,
+            addresses: selectedClient.addresses
+          },
+          appointment: {
+            date: appointment.date,
+            time: appointment.time,
+            team: appointment.team,
+            service: appointment.service,
+            price: appointment.price
+          }
+        })
+      });
+
+      setSendingNotifications((items) => items.filter((item) => item !== notificationKey));
+
+      if (!response.ok) {
+        setNotificationError(labels.notificationFailed);
+        return;
+      }
+
+      setSentNotifications((items) => (items.includes(notificationKey) ? items : [...items, notificationKey]));
+      return;
+    }
+
     setNotificationError("");
-    setSentNotifications((items) => (items.includes(key) ? items : [...items, key]));
+    setSentNotifications((items) => (items.includes(`${key}:email`) ? items : [...items, `${key}:email`]));
   }
 
   return (
@@ -511,6 +578,7 @@ function AppointmentForm({
             <option value="started">{labels.started}</option>
             <option value="finished">{labels.finished}</option>
             <option value="paid">{labels.paid}</option>
+            <option value="canceled">{labels.canceled}</option>
           </select>
         </label>
         </div>
@@ -524,6 +592,12 @@ function AppointmentForm({
           <Button onClick={onCancel} type="button" variant="outline">
             {labels.cancel}
           </Button>
+          {onDelete ? (
+            <Button onClick={onDelete} type="button" variant="danger">
+              <Trash2 className="h-4 w-4" />
+              {labels.deleteAppointment}
+            </Button>
+          ) : null}
         </div>
 
         <section className="grid gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
@@ -576,13 +650,14 @@ function AppointmentForm({
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-black text-slate-800">{row.label}</span>
                   {sentNotifications.includes(`${row.key}:sms`) || sentNotifications.includes(`${row.key}:email`) ? <Badge tone="green">{labels.notificationSent}</Badge> : null}
+                  {sendingNotifications.includes(`${row.key}:sms`) ? <Badge tone="yellow">{labels.notificationSending}</Badge> : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button onClick={() => markNotificationSent(`${row.key}:sms`, "sms")} type="button" variant="outline">
+                  <Button disabled={sendingNotifications.includes(`${row.key}:sms`)} onClick={() => markNotificationSent(row.key as AppointmentMessageTemplateKey, "sms")} type="button" variant="outline">
                     <MessageSquare className="h-4 w-4" />
                     {labels.sms}
                   </Button>
-                  <Button onClick={() => markNotificationSent(`${row.key}:email`, "email")} type="button" variant="outline">
+                  <Button onClick={() => markNotificationSent(row.key as AppointmentMessageTemplateKey, "email")} type="button" variant="outline">
                     <Mail className="h-4 w-4" />
                     {labels.email}
                   </Button>
@@ -680,8 +755,12 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
   }
 
   useEffect(() => {
-    setAppointments(normalizeAppointments(readLocalRecords(storageKey, createDefaultAppointments(selectedMonth))));
-    setClients(readLocalRecords(clientsStorageKey, defaultClients));
+    const localAppointments = normalizeAppointments(readLocalRecords(storageKey, createDefaultAppointments(selectedMonth)));
+    const localClients = readLocalRecords(clientsStorageKey, defaultClients);
+    setAppointments(localAppointments);
+    setClients(localClients);
+    readRemoteRecords(storageKey, localAppointments).then((records) => setAppointments(normalizeAppointments(records)));
+    readRemoteRecords(clientsStorageKey, localClients).then(setClients);
   }, [month]);
 
   function openNewAppointment(date = formatDateKey(new Date())) {
@@ -790,11 +869,20 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
     setDraftAppointment(nextAppointments.find((appointment) => appointment.id === appointmentId) ?? null);
   }
 
+  function deleteAppointment(appointment: AppointmentRecord) {
+    const sourceId = appointment.sourceId ?? appointment.id.split("_repeat_")[0];
+    const nextAppointments = appointments.filter((item) => item.id !== appointment.id && item.id !== sourceId && item.sourceId !== sourceId);
+    setAppointments(nextAppointments);
+    writeLocalRecords(storageKey, nextAppointments);
+    setDraftAppointment(null);
+    setSelectedDayKey(null);
+  }
+
   return (
     <div className="grid gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
-          {[labels.scheduled, labels.started, labels.finished, labels.paid].map((label) => (
+          {[labels.scheduled, labels.started, labels.finished, labels.paid, labels.canceled].map((label) => (
             <Badge key={label} tone="gray">{label}</Badge>
           ))}
         </div>
@@ -986,6 +1074,7 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
           onOpenNewClient={() => setShowClientModal(true)}
           onCancel={() => setDraftAppointment(null)}
           onCheckIn={draftAppointment.id.startsWith("new_") ? undefined : () => checkIn(draftAppointment.id)}
+          onDelete={draftAppointment.id.startsWith("new_") ? undefined : () => deleteAppointment(draftAppointment)}
           onSubmit={saveAppointment}
           title={draftAppointment.id.startsWith("new_") ? labels.newAppointment : labels.editAppointment}
         />

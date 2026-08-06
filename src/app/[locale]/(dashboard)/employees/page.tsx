@@ -4,7 +4,8 @@ import { EmployeesManager } from "@/modules/employees/employees-manager";
 
 export default async function EmployeesPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const t = createTranslator(getDictionary(locale));
+  const dictionary = getDictionary(locale);
+  const t = createTranslator(dictionary);
 
   return (
     <div className="grid gap-6">
@@ -31,7 +32,8 @@ export default async function EmployeesPage({ params }: { params: Promise<{ loca
           status: t("common.status"),
           active: t("employees.active"),
           emptyTitle: t("employees.emptyTitle"),
-          emptyDescription: t("employees.emptyDescription")
+          emptyDescription: t("employees.emptyDescription"),
+          profile: dictionary.employeeProfile
         }}
       />
     </div>

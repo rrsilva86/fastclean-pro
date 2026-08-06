@@ -33,39 +33,40 @@ export default async function DashboardLayout({
     <div className="flex min-h-screen bg-app-background">
       <AppSidebar locale={safeLocale} session={session} />
       <main className="min-w-0 flex-1">
-        <header className="flex flex-col items-start justify-between gap-3 px-5 py-5 sm:flex-row sm:items-center lg:px-8">
+        <header className="flex flex-col items-start justify-between gap-3 px-4 py-3 sm:flex-row sm:items-center lg:px-5">
           <div className="flex items-center gap-2">
             <LanguageSwitcher label={t("common.changeLanguage")} locale={safeLocale} />
-            <button className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-900 shadow-soft transition hover:border-cyan-200 hover:bg-cyan-50" type="button">
-              <Award className="h-4 w-4" />
+            <VersionBadge compact />
+            <button className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-900 shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50" type="button">
+              <Award className="h-3.5 w-3.5" />
               {t("common.upgrade")}
             </button>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="hidden sm:block">
-              <p className="text-sm font-semibold text-slate-900">{session.name}</p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs font-black text-slate-900">{session.name}</p>
+              <p className="text-[11px] font-semibold text-slate-500">
                 {t("common.tenant")}: {session.tenant.tenantId}
               </p>
+              <div className="mt-1.5">
+                <VersionBadge />
+              </div>
             </div>
-            <div className="flex max-w-full flex-wrap gap-2 text-xs font-bold text-slate-600 sm:justify-end">
-              <span className="rounded-full bg-cyan-50 px-3 py-1.5 text-cyan-700 ring-1 ring-cyan-100">
+            <div className="flex max-w-full flex-wrap gap-1.5 text-[11px] font-black text-slate-600 sm:justify-end">
+              <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-cyan-700 ring-1 ring-cyan-100">
                 {t("common.plan")}: {session.tenant.planCode}
               </span>
-              <span className="rounded-full bg-slate-50 px-3 py-1.5 text-slate-600 ring-1 ring-slate-100">
+              <span className="rounded-full bg-slate-50 px-2.5 py-1 text-slate-600 ring-1 ring-slate-100">
                 {t("employees.role")}: {t(`roles.${session.role}`)}
               </span>
-              <span className="max-w-full truncate rounded-full bg-teal-50 px-3 py-1.5 text-teal-700 ring-1 ring-teal-100">
+              <span className="max-w-full truncate rounded-full bg-teal-50 px-2.5 py-1 text-teal-700 ring-1 ring-teal-100">
                 {t("common.location")}: {session.tenant.activeLocationId}
               </span>
             </div>
             <LogoutButton label={t("nav.logout")} locale={locale} />
           </div>
         </header>
-        <div className="px-5 pb-8 lg:px-8">{children}</div>
-        <footer className="px-5 pb-5 text-right lg:px-8">
-          <VersionBadge />
-        </footer>
+        <div className="px-4 pb-24 lg:px-5 lg:pb-5">{children}</div>
       </main>
     </div>
   );

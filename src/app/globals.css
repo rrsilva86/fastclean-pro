@@ -21,6 +21,11 @@
 body {
   margin: 0;
   min-height: 100vh;
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
   background:
     radial-gradient(circle at top right, rgba(153, 246, 228, 0.24), transparent 28rem),
     var(--color-background);
@@ -40,4 +45,19 @@ a {
 ::selection {
   background: rgba(153, 246, 228, 0.75);
   color: #0f172a;
+}
+
+@media (display-mode: standalone) {
+  body {
+    -webkit-user-select: none;
+    overscroll-behavior-y: contain;
+  }
+
+  input,
+  textarea,
+  select,
+  button,
+  a {
+    -webkit-user-select: auto;
+  }
 }

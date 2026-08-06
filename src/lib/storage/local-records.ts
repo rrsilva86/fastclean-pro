@@ -41,4 +41,52 @@ export function readLocalRecords<T>(key: string, fallback: T[]): T[] {
 
 export function writeLocalRecords<T>(key: string, records: T[]) {
   window.localStorage.setItem(buildScopedStorageKey(key), JSON.stringify(records));
+  syncRemoteRecords(key, records);
+}
+
+export async function readRemoteRecords<T>(key: string, fallback: T[]): Promise<T[]> {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  try {
+    const response = await fetch(`/api/storage/${encodeURIComponent(key)}`, {
+      cache: "no-store",
+      credentials: "same-origin"
+    });
+
+    if (!response.ok) {
+      return fallback;
+    }
+
+    const payload = await response.json() as { records?: T[] };
+    const records = Array.isArray(payload.records) ? payload.records : fallback;
+
+    if (records.length > 0) {
+      window.localStorage.setItem(buildScopedStorageKey(key), JSON.stringify(records));
+      return records;
+    }
+
+    if (fallback.length > 0) {
+      syncRemoteRecords(key, fallback);
+    }
+
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function syncRemoteRecords<T>(key: string, records: T[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  fetch(`/api/storage/${encodeURIComponent(key)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ records }),
+    keepalive: JSON.stringify({ records }).length < 60000
+  }).catch(() => undefined);
 }
