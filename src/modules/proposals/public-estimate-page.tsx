@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, FileText, Printer, XCircle } from "lucide-react";
 import { Badge, Button, EmptyState } from "@/components/design-system";
-import { EstimateDocument, type EstimateDocumentSettings, estimatePdfFileName } from "@/modules/proposals/estimate-document";
+import { EstimateDocument, buildEstimateDocumentData, type EstimateDocumentSettings, estimatePdfFileName } from "@/modules/proposals/estimate-document";
 import type { EstimateRecord } from "@/modules/proposals/proposals-manager";
 
 type PublicLabels = Record<string, string>;
@@ -86,6 +86,7 @@ export function PublicEstimatePage({ labels, token }: { labels: PublicLabels; to
   }
 
   const isClosed = closedStatus(estimate.status);
+  const documentData = buildEstimateDocumentData(estimate, labels, documentSettings);
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 print:bg-white">
@@ -93,12 +94,14 @@ export function PublicEstimatePage({ labels, token }: { labels: PublicLabels; to
         <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
           <Badge tone={estimate.status === "accepted" ? "green" : estimate.status === "rejected" ? "red" : "blue"}>{labels[`status.${estimate.status}`] ?? estimate.status}</Badge>
           <div className="flex gap-2">
-            <Button onClick={() => { document.title = estimatePdfFileName(estimate); window.print(); }} type="button" variant="outline"><Printer className="h-4 w-4" />{labels.print}</Button>
-            <Button onClick={() => { document.title = estimatePdfFileName(estimate); window.print(); }} type="button" variant="outline"><FileText className="h-4 w-4" />{labels.downloadPdf}</Button>
+            <Button onClick={() => printPublicEstimate(estimate)} type="button" variant="outline"><Printer className="h-4 w-4" />{labels.print}</Button>
+            <Button onClick={() => printPublicEstimate(estimate)} type="button" variant="outline"><FileText className="h-4 w-4" />{labels.downloadPdf}</Button>
           </div>
         </div>
 
-        <EstimateDocument estimate={estimate} labels={labels} settings={documentSettings} />
+        <div className="estimate-public-canvas overflow-auto print:contents">
+          <EstimateDocument data={documentData} />
+        </div>
         <section className="flex flex-wrap items-center justify-end gap-2 rounded-lg bg-white p-4 shadow-sm print:hidden">
           {message ? <p className="mr-auto text-sm font-black text-teal-700">{message}</p> : null}
           <Button disabled={isClosed} onClick={() => updateStatus("rejected")} type="button" variant="outline"><XCircle className="h-4 w-4" />{labels.publicDecline}</Button>
@@ -107,4 +110,21 @@ export function PublicEstimatePage({ labels, token }: { labels: PublicLabels; to
       </div>
     </main>
   );
+}
+
+async function printPublicEstimate(estimate: EstimateRecord) {
+  document.title = estimatePdfFileName(estimate);
+  await document.fonts?.ready;
+  const images = Array.from(document.querySelectorAll<HTMLImageElement>(".estimate-document-printable img"));
+  await Promise.all(images.map((image) => {
+    if (image.complete) {
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      image.addEventListener("load", () => resolve(), { once: true });
+      image.addEventListener("error", () => resolve(), { once: true });
+    });
+  }));
+  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  window.print();
 }

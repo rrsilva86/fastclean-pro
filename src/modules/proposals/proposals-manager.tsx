@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { CalendarPlus, Copy, FilterX, MoreHorizontal, Plus, Printer, Send, XCircle } from "lucide-react";
 import { Badge, Button, Card, CardContent, EmptyState, Input, Modal, Table, Td, Th } from "@/components/design-system";
 import { readRemoteRecords, writeLocalRecords } from "@/lib/storage/local-records";
 import { hasPermission, type RoleCode } from "@/lib/permissions/permissions";
 import { defaultClients, type ClientRecord } from "@/modules/clients/types";
-import { EstimateDocument, type EstimateDocumentSettings, estimatePdfFileName } from "@/modules/proposals/estimate-document";
+import { EstimateDocument, buildEstimateDocumentData, type EstimateDocumentData, type EstimateDocumentSettings, estimatePdfFileName } from "@/modules/proposals/estimate-document";
 
 type EstimateStatus = "draft" | "sent" | "viewed" | "accepted" | "rejected" | "expired" | "converted" | "void";
 type EstimateSource = "manual" | "pricing_calculator" | "customer" | "appointment" | "other";
@@ -463,7 +464,7 @@ export function ProposalsManager({ labels, role = "owner" }: { labels: ProposalL
         </CardContent>
       </Card>
 
-      {selected ? <EstimateWorkspace canDelete={can(role, "estimate.delete")} canInternal={can(role, "estimate.viewInternalPricing")} documentSettings={documentSettings} estimate={selected} labels={labels} onAccept={() => updateEstimate(selected, { acceptedAt: new Date().toISOString(), status: "accepted" }, "Marked accepted", selected.status, "accepted")} onClose={() => setSelectedId(null)} onConvert={() => convertToAppointment(selected)} onDelete={() => deleteDraft(selected)} onDuplicate={() => duplicateEstimate(selected)} onEdit={() => setEditingId(selected.id)} onPrint={() => window.print()} onReject={() => updateEstimate(selected, { rejectedAt: new Date().toISOString(), status: "rejected" }, "Marked rejected", selected.status, "rejected")} onSend={() => setSendId(selected.id)} onVoid={() => setVoidId(selected.id)} /> : null}
+      {selected ? <EstimateWorkspace canDelete={can(role, "estimate.delete")} canInternal={can(role, "estimate.viewInternalPricing")} documentSettings={documentSettings} estimate={selected} labels={labels} onAccept={() => updateEstimate(selected, { acceptedAt: new Date().toISOString(), status: "accepted" }, "Marked accepted", selected.status, "accepted")} onClose={() => setSelectedId(null)} onConvert={() => convertToAppointment(selected)} onDelete={() => deleteDraft(selected)} onDuplicate={() => duplicateEstimate(selected)} onEdit={() => setEditingId(selected.id)} onReject={() => updateEstimate(selected, { rejectedAt: new Date().toISOString(), status: "rejected" }, "Marked rejected", selected.status, "rejected")} onSend={() => setSendId(selected.id)} onVoid={() => setVoidId(selected.id)} /> : null}
       {editing ? <EstimateEditor clients={clients} estimate={editing} labels={labels} onClose={() => setEditingId(null)} onSave={saveEstimate} /> : null}
       {sending ? <SendEstimateModal estimate={sending} labels={labels} onClose={() => setSendId(null)} onSend={sendEstimate} /> : null}
       {voiding ? <VoidEstimateModal estimate={voiding} labels={labels} onClose={() => setVoidId(null)} onVoid={(reason) => { updateEstimate(voiding, { status: "void", voidedAt: new Date().toISOString(), voidReason: reason }, "Estimate voided"); setVoidId(null); }} /> : null}
@@ -506,49 +507,134 @@ function Select({ children, label, onChange, value }: { children: ReactNode; lab
   );
 }
 
-function EstimateWorkspace({ canDelete, canInternal, documentSettings, estimate, labels, onAccept, onClose, onConvert, onDelete, onDuplicate, onEdit, onPrint, onReject, onSend, onVoid }: { canDelete: boolean; canInternal: boolean; documentSettings?: EstimateDocumentSettings; estimate: EstimateRecord; labels: ProposalLabels; onAccept: () => void; onClose: () => void; onConvert: () => void; onDelete: () => void; onDuplicate: () => void; onEdit: () => void; onPrint: () => void; onReject: () => void; onSend: () => void; onVoid: () => void }) {
+function EstimateWorkspace({ canDelete, canInternal, documentSettings, estimate, labels, onAccept, onClose, onConvert, onDelete, onDuplicate, onEdit, onReject, onSend, onVoid }: { canDelete: boolean; canInternal: boolean; documentSettings?: EstimateDocumentSettings; estimate: EstimateRecord; labels: ProposalLabels; onAccept: () => void; onClose: () => void; onConvert: () => void; onDelete: () => void; onDuplicate: () => void; onEdit: () => void; onReject: () => void; onSend: () => void; onVoid: () => void }) {
   const [tab, setTab] = useState<EstimateTab>("overview");
   const status = deriveStatus(estimate);
   const publicLink = publicEstimateLink(estimate);
+  const documentData = useMemo(() => buildEstimateDocumentData(estimate, labels, documentSettings), [documentSettings, estimate, labels]);
   return (
-    <Modal onClose={onClose} title={`${labels.estimateWorkspace} · ${estimate.number}`}>
-      <div className="grid gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <StatusBadge labels={labels} status={status} />
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={onEdit} type="button" variant="outline">{labels.edit}</Button>
-            <Button onClick={onSend} type="button"><Send className="h-4 w-4" />{estimate.sentAt ? labels.resend : labels.send}</Button>
-            <Button onClick={() => navigator.clipboard?.writeText(publicLink)} type="button" variant="outline"><Copy className="h-4 w-4" />{labels.copyPublicLink}</Button>
-            <Button onClick={() => { document.title = estimatePdfFileName(estimate); onPrint(); }} type="button" variant="outline"><Printer className="h-4 w-4" />{labels.print}</Button>
+    <>
+      <Modal onClose={onClose} size="wide" title={`${labels.estimateWorkspace} · ${estimate.number}`}>
+        <div className="grid gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+            <StatusBadge labels={labels} status={status} />
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={onEdit} type="button" variant="outline">{labels.edit}</Button>
+              <Button onClick={onSend} type="button"><Send className="h-4 w-4" />{estimate.sentAt ? labels.resend : labels.send}</Button>
+              <Button onClick={() => navigator.clipboard?.writeText(publicLink)} type="button" variant="outline"><Copy className="h-4 w-4" />{labels.copyPublicLink}</Button>
+              <Button onClick={() => printEstimateDocument(estimate)} type="button" variant="outline"><Printer className="h-4 w-4" />{labels.print}</Button>
+            </div>
+          </div>
+          <div className="flex gap-2 border-b border-slate-100 print:hidden">
+            {(["overview", "pricing", "communication", "activity"] as EstimateTab[]).filter((item) => item !== "pricing" || canInternal).map((item) => (
+              <button className={`px-3 py-2 text-sm font-black ${tab === item ? "border-b-2 border-secondary text-slate-950" : "text-slate-500"}`} key={item} onClick={() => setTab(item)} type="button">{labels[`tab.${item}`] ?? item}</button>
+            ))}
+          </div>
+          {tab === "overview" ? <EstimatePreview data={documentData} /> : null}
+          {tab === "pricing" ? <PricingSnapshot estimate={estimate} labels={labels} /> : null}
+          {tab === "communication" ? <HistoryList empty={labels.noCommunication} items={estimate.communications.map((item) => `${item.at.slice(0, 10)} · ${item.channel} · ${item.message}`)} /> : null}
+          {tab === "activity" ? <HistoryList empty={labels.noActivity} items={estimate.activity.map((item) => `${item.at.slice(0, 10)} · ${item.action}`)} /> : null}
+          <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4 print:hidden">
+            {["sent", "viewed"].includes(status) ? <Button onClick={onAccept} type="button" variant="secondary">{labels.markAccepted}</Button> : null}
+            {["sent", "viewed"].includes(status) ? <Button onClick={onReject} type="button" variant="outline">{labels.markRejected}</Button> : null}
+            {status === "accepted" ? <Button onClick={onConvert} type="button"><CalendarPlus className="h-4 w-4" />{labels.convertToAppointment}</Button> : null}
+            <Button onClick={onDuplicate} type="button" variant="outline">{labels.duplicate}</Button>
+            {status === "draft" && canDelete ? <Button onClick={onDelete} type="button" variant="danger">{labels.deleteDraft}</Button> : <Button onClick={onVoid} type="button" variant="danger"><XCircle className="h-4 w-4" />{labels.voidEstimate}</Button>}
           </div>
         </div>
-        <div className="flex gap-2 border-b border-slate-100">
-          {(["overview", "pricing", "communication", "activity"] as EstimateTab[]).filter((item) => item !== "pricing" || canInternal).map((item) => (
-            <button className={`px-3 py-2 text-sm font-black ${tab === item ? "border-b-2 border-secondary text-slate-950" : "text-slate-500"}`} key={item} onClick={() => setTab(item)} type="button">{labels[`tab.${item}`] ?? item}</button>
-          ))}
-        </div>
-        {tab === "overview" ? <EstimatePreview estimate={estimate} labels={labels} settings={documentSettings} /> : null}
-        {tab === "pricing" ? <PricingSnapshot estimate={estimate} labels={labels} /> : null}
-        {tab === "communication" ? <HistoryList empty={labels.noCommunication} items={estimate.communications.map((item) => `${item.at.slice(0, 10)} · ${item.channel} · ${item.message}`)} /> : null}
-        {tab === "activity" ? <HistoryList empty={labels.noActivity} items={estimate.activity.map((item) => `${item.at.slice(0, 10)} · ${item.action}`)} /> : null}
-        <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-          {["sent", "viewed"].includes(status) ? <Button onClick={onAccept} type="button" variant="secondary">{labels.markAccepted}</Button> : null}
-          {["sent", "viewed"].includes(status) ? <Button onClick={onReject} type="button" variant="outline">{labels.markRejected}</Button> : null}
-          {status === "accepted" ? <Button onClick={onConvert} type="button"><CalendarPlus className="h-4 w-4" />{labels.convertToAppointment}</Button> : null}
-          <Button onClick={onDuplicate} type="button" variant="outline">{labels.duplicate}</Button>
-          {status === "draft" && canDelete ? <Button onClick={onDelete} type="button" variant="danger">{labels.deleteDraft}</Button> : <Button onClick={onVoid} type="button" variant="danger"><XCircle className="h-4 w-4" />{labels.voidEstimate}</Button>}
-        </div>
-      </div>
-    </Modal>
+      </Modal>
+      <EstimatePrintPortal data={documentData} />
+    </>
   );
 }
 
-function EstimatePreview({ estimate, labels, settings }: { estimate: EstimateRecord; labels: ProposalLabels; settings?: EstimateDocumentSettings }) {
+function EstimatePreview({ data }: { data: EstimateDocumentData }) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const scaleLayerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.62);
+  const documentWidthPx = 816;
+  const documentHeightPx = 2136;
+  const canvasPaddingPx = 20;
+  const fitSafetyRatio = 0.9;
+
+  useLayoutEffect(() => {
+    const updateScale = () => {
+      const width = viewportRef.current?.clientWidth ?? 0;
+      if (!width) {
+        return;
+      }
+      const availableWidth = Math.max(0, width - canvasPaddingPx * 2);
+      const renderedDocumentWidth = scaleLayerRef.current?.querySelector<HTMLElement>(".estimate-page")?.offsetWidth || documentWidthPx;
+      const maxScale = width < 820 ? 0.68 : width < 980 ? 0.74 : width < 1180 ? 0.86 : 1;
+      const nextScale = Math.min(maxScale, Math.max(0.34, (availableWidth / renderedDocumentWidth) * fitSafetyRatio));
+      setScale(Number(nextScale.toFixed(3)));
+    };
+
+    const frame = window.requestAnimationFrame(updateScale);
+    const timers = [window.setTimeout(updateScale, 80), window.setTimeout(updateScale, 250), window.setTimeout(updateScale, 600)];
+    const observer = new ResizeObserver(updateScale);
+    if (viewportRef.current) {
+      observer.observe(viewportRef.current);
+    }
+    window.addEventListener("resize", updateScale);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      timers.forEach((timer) => window.clearTimeout(timer));
+      window.removeEventListener("resize", updateScale);
+      observer.disconnect();
+    };
+  }, [data]);
+
+  const scaledWidth = documentWidthPx * scale;
+  const scaledHeight = documentHeightPx * scale;
+
   return (
-    <div className="-mx-4 overflow-x-auto bg-slate-100 p-4 print:m-0 print:overflow-visible print:bg-white print:p-0">
-      <EstimateDocument estimate={estimate} labels={labels} settings={settings} />
+    <div className="estimate-preview-canvas -mx-4 overflow-x-auto overflow-y-visible bg-slate-100 px-5 py-5 print:hidden" ref={viewportRef}>
+      <div className="estimate-preview-center flex min-w-full justify-center">
+        <div className="estimate-preview-stage relative shrink-0 overflow-hidden" style={{ height: `${scaledHeight}px`, width: `${scaledWidth}px` }}>
+          <div className="estimate-preview-scale absolute left-0 top-0 origin-top-left" ref={scaleLayerRef} style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: `${documentWidthPx}px` }}>
+            <EstimateDocument data={data} printable={false} showOverflowWarning />
+          </div>
+        </div>
+      </div>
     </div>
   );
+}
+
+function EstimatePrintPortal({ data }: { data: EstimateDocumentData }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
+  return createPortal(
+    <div aria-hidden className="estimate-print-root hidden">
+      <EstimateDocument data={data} printable />
+    </div>,
+    document.body
+  );
+}
+
+async function printEstimateDocument(estimate: EstimateRecord) {
+  document.title = estimatePdfFileName(estimate);
+  await document.fonts?.ready;
+  const images = Array.from(document.querySelectorAll<HTMLImageElement>(".estimate-print-root img"));
+  await Promise.all(images.map((image) => {
+    if (image.complete) {
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      image.addEventListener("load", () => resolve(), { once: true });
+      image.addEventListener("error", () => resolve(), { once: true });
+    });
+  }));
+  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  window.print();
 }
 
 function PreviewBox({ title, value }: { title: string; value: string }) {
