@@ -9,6 +9,13 @@ import { defaultTeams, type TeamRecord } from "@/modules/teams/types";
 
 const employeesStorageKey = "fastclean_employees";
 const teamsStorageKey = "fastclean_teams";
+const appointmentsStorageKey = "fastclean_appointments";
+
+type TeamAppointment = {
+  date?: string;
+  status?: string;
+  team?: string;
+};
 
 type TeamsLabels = {
   newTeam: string;
@@ -34,6 +41,7 @@ type TeamsLabels = {
 export function TeamsManager({ labels }: { labels: TeamsLabels }) {
   const [employees, setEmployees] = useState<EmployeeRecord[]>(defaultEmployees);
   const [teams, setTeams] = useState<TeamRecord[]>(defaultTeams);
+  const [appointments, setAppointments] = useState<TeamAppointment[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<TeamRecord | null>(null);
   const [routeTeam, setRouteTeam] = useState<TeamRecord | null>(null);
@@ -41,15 +49,19 @@ export function TeamsManager({ labels }: { labels: TeamsLabels }) {
   useEffect(() => {
     const localEmployees = readLocalRecords(employeesStorageKey, defaultEmployees);
     const localTeams = readLocalRecords(teamsStorageKey, defaultTeams);
+    const localAppointments = readLocalRecords<TeamAppointment>(appointmentsStorageKey, []);
     setEmployees(localEmployees);
     setTeams(localTeams);
+    setAppointments(localAppointments);
     readRemoteRecords(employeesStorageKey, localEmployees).then(setEmployees);
     readRemoteRecords(teamsStorageKey, localTeams).then(setTeams);
+    readRemoteRecords<TeamAppointment>(appointmentsStorageKey, localAppointments).then(setAppointments);
   }, []);
 
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
   const drivers = employees.filter((employee) => employee.role.toLowerCase() === "driver");
   const helpers = employees.filter((employee) => employee.role.toLowerCase() !== "driver");
+  const todayKey = new Date().toISOString().slice(0, 10);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -150,6 +162,7 @@ export function TeamsManager({ labels }: { labels: TeamsLabels }) {
         {teams.map((team) => {
           const driver = employeeById.get(team.driverId);
           const helperNames = team.helperIds.map((helperId) => employeeById.get(helperId)?.name).filter(Boolean).join(", ");
+          const jobsToday = appointments.filter((appointment) => appointment.team === team.name && appointment.date === todayKey && appointment.status !== "cancelled" && appointment.status !== "canceled").length;
 
           return (
             <Card className="cursor-pointer transition hover:-translate-y-0.5 hover:border-cyan-100 hover:shadow-premium" key={team.id}>
@@ -164,7 +177,7 @@ export function TeamsManager({ labels }: { labels: TeamsLabels }) {
                       <p className="text-sm font-semibold text-slate-500">{driver?.name ?? "-"}</p>
                     </div>
                   </div>
-                  <Badge tone="blue">{team.jobsToday}</Badge>
+                  <Badge tone="blue">{jobsToday}</Badge>
                 </div>
                 <div className="mt-5 rounded-xl bg-slate-50 p-4" onClick={() => setSelectedTeam(team)}>
                   <p className="text-xs font-black uppercase tracking-wide text-slate-400">{labels.helpers}</p>

@@ -1,7 +1,6 @@
-import { Pool } from "pg";
+import { Pool, type QueryResultRow } from "pg";
 
 declare global {
-  // eslint-disable-next-line no-var
   var fastcleanPostgresPool: Pool | undefined;
 }
 
@@ -26,7 +25,7 @@ export function getPostgresPool() {
   return global.fastcleanPostgresPool ?? null;
 }
 
-export async function queryPostgres<T>(sql: string, values: unknown[] = []) {
+export async function queryPostgres<T extends QueryResultRow = QueryResultRow>(sql: string, values: unknown[] = []) {
   const pool = getPostgresPool();
 
   if (!pool) {

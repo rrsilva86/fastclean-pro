@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "test": "pnpm test:address",
+    "test:address": "node scripts/address-autocomplete-tests.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

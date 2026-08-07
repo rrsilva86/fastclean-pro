@@ -9,6 +9,8 @@ const logDir = path.join(process.env.HOME || appDir, "Library/Logs/FastCleanPro"
 const logFile = path.join(logDir, "fastclean-pro.log");
 const pidFile = path.join(logDir, "fastclean-pro.pid");
 const nextBin = path.join(appDir, "node_modules/next/dist/bin/next");
+const localNode = path.join(appDir, ".local-tools/node-v24.16.0-darwin-arm64/bin/node");
+const nodeBin = fs.existsSync(localNode) ? localNode : process.execPath;
 
 function isPortOpen() {
   return new Promise((resolve) => {
@@ -32,13 +34,13 @@ function isPortOpen() {
   }
 
   const out = fs.openSync(logFile, "a");
-  const child = spawn(process.execPath, [nextBin, "dev", "-p", String(port)], {
+  const child = spawn(nodeBin, [nextBin, "start", "-p", String(port)], {
     cwd: appDir,
     detached: true,
     env: {
       HOME: process.env.HOME || "",
-      NODE_ENV: "development",
-      PATH: `/Applications/Codex.app/Contents/Resources:/Users/rafaelsilva/Documents/Codex/2026-05-30/files-mentioned-by-the-user-pasted/work/bin:${process.env.PATH || ""}`
+      NODE_ENV: "production",
+      PATH: `${path.dirname(nodeBin)}:/usr/local/bin:/opt/homebrew/bin:${process.env.PATH || ""}`
     },
     stdio: ["ignore", out, out]
   });

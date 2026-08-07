@@ -12,6 +12,17 @@ type TestSmsPayload = {
   message?: string;
 };
 
+function safeReason(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return "";
+  }
+
+  const record = value as Record<string, unknown>;
+  const message = record.message ?? record.error ?? record.error_description ?? record.msg;
+
+  return typeof message === "string" ? message.slice(0, 240) : "";
+}
+
 function createTestClient(payload: TestSmsPayload): ClientRecord {
   return {
     id: `highlevel_sms_test_${Date.now()}`,
@@ -54,7 +65,7 @@ export async function POST(request: Request) {
   const syncResult = await syncClientToHighLevel({ client: createTestClient(payload) });
 
   if (syncResult.status !== "synced" || !syncResult.contactId) {
-    return NextResponse.json({ ok: false, reason: syncResult.warning || "contact_sync_failed" }, { status: 502 });
+    return NextResponse.json({ ok: false, reason: syncResult.warning || "contact_sync_failed", detail: syncResult.detail }, { status: 502 });
   }
 
   const smsResult = await sendHighLevelSms({
@@ -63,7 +74,7 @@ export async function POST(request: Request) {
   });
 
   if (!smsResult.ok) {
-    return NextResponse.json({ ok: false, reason: `sms_send_failed_${smsResult.status}` }, { status: 502 });
+    return NextResponse.json({ ok: false, reason: `sms_send_failed_${smsResult.status}`, detail: safeReason(smsResult.body) }, { status: 502 });
   }
 
   return NextResponse.json({

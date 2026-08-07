@@ -76,6 +76,7 @@ export default async function AppointmentsPage({
           estimatedDuration: t("appointments.estimatedDuration"),
           assignedTeam: t("appointments.assignedTeam"),
           address: t("appointments.address"),
+          attentionRequired: t("appointments.attentionRequired"),
           payment: t("appointments.payment"),
           invoice: t("appointments.invoice"),
           communicationStatus: t("appointments.communicationStatus"),

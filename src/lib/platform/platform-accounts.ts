@@ -21,7 +21,7 @@ export const initialPlatformAccounts: PlatformAccount[] = [
     ownerName: "Raisa Silva",
     email: "raisa@fastcleanpro.com",
     phone: "",
-    planCode: "professional",
+    planCode: "enterprise",
     couponCode: "ESPOSA100",
     discountPercent: 100,
     complimentary: true,

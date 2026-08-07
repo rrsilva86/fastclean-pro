@@ -35,7 +35,7 @@ const navigationItems = [
   { key: "nav.payroll", href: "payroll", icon: WalletCards, module: "payroll", permission: "payroll.read" },
   { key: "nav.calculator", href: "calculator", icon: Calculator, module: "calculator", permission: "calculator.read" },
   { key: "nav.messages", href: "appointments", icon: MessageSquare, module: "messages", permission: "messages.read" },
-  { key: "nav.proposals", href: "appointments", icon: FileText, module: "appointments", permission: "appointments.read" },
+  { key: "nav.proposals", href: "proposals", icon: FileText, module: "proposals", permission: "estimate.view" },
   { key: "nav.crm", href: "clients", icon: Monitor, module: "crm", permission: "crm.read" },
   { key: "nav.reports", href: "dashboard", icon: BarChart3, module: "reports", permission: "reports.read" }
 ];

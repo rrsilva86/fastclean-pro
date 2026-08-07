@@ -13,7 +13,7 @@ export type SubscriptionPlan = {
 export const subscriptionPlans: Record<PlanCode, SubscriptionPlan> = {
   starter: {
     code: "starter",
-    includedModules: ["dashboard", "calendar", "clients", "appointments", "teams", "employees", "invoices"],
+    includedModules: ["dashboard", "calendar", "clients", "appointments", "teams", "employees", "invoices", "proposals"],
     limits: {
       companies: 1,
       locations: 1,
@@ -23,7 +23,7 @@ export const subscriptionPlans: Record<PlanCode, SubscriptionPlan> = {
   },
   professional: {
     code: "professional",
-    includedModules: ["dashboard", "calendar", "clients", "appointments", "teams", "employees", "invoices", "payroll", "messages", "settings"],
+    includedModules: ["dashboard", "calendar", "clients", "appointments", "teams", "employees", "invoices", "payroll", "calculator", "messages", "proposals", "settings"],
     limits: {
       companies: 2,
       locations: 3,
@@ -42,7 +42,9 @@ export const subscriptionPlans: Record<PlanCode, SubscriptionPlan> = {
       "employees",
       "invoices",
       "payroll",
+      "calculator",
       "messages",
+      "proposals",
       "reports",
       "settings",
       "crm",
@@ -66,7 +68,9 @@ export const subscriptionPlans: Record<PlanCode, SubscriptionPlan> = {
       "employees",
       "invoices",
       "payroll",
+      "calculator",
       "messages",
+      "proposals",
       "reports",
       "settings",
       "crm",

@@ -15,15 +15,16 @@ export function LanguageSwitcher({ locale, label }: { locale: Locale; label: str
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const currentLocale = locales.includes(locale) ? locale : defaultLocale;
+  const currentPathname = pathname ?? `/${currentLocale}`;
 
   function getLocalizedPath(nextLocale: Locale) {
-    const segments = pathname.split("/");
+    const segments = currentPathname.split("/");
     if (locales.includes(segments[1] as Locale)) {
       segments[1] = nextLocale;
       return segments.join("/") || `/${nextLocale}`;
     }
 
-    return `/${nextLocale}${pathname}`;
+    return `/${nextLocale}${currentPathname}`;
   }
 
   return (

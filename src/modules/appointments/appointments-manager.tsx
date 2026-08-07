@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarCheck, ChevronLeft, ChevronRight, Clock3, FilterX, Mail, MapPin, MapPinned, MessageSquare, Plus, Trash2, UserPlus, X } from "lucide-react";
 import { Badge, Button, Card, CardContent, CardHeader, Input, Modal, Table, Td, Th } from "@/components/design-system";
-import { readLocalRecords, readRemoteRecords, writeLocalRecords } from "@/lib/storage/local-records";
+import { buildScopedStorageKey, readLocalRecords, readRemoteRecords, writeLocalRecords } from "@/lib/storage/local-records";
 import { defaultClients, type ClientRecord } from "@/modules/clients/types";
 import { ClientForm, type ClientsLabels } from "@/modules/clients/clients-manager";
 import { defaultCleaningServiceTypes, defaultExtraServices } from "@/modules/services/types";
 import { defaultAppointmentMessageTemplates, type AppointmentMessageTemplateKey, type AppointmentMessageTemplates } from "@/lib/highlevel/message-templates";
+import { defaultTeams, type TeamRecord } from "@/modules/teams/types";
 
 type AppointmentStatus = "scheduled" | "awaiting_confirmation" | "confirmed" | "in_progress" | "completed" | "cancelled" | "no_show" | "started" | "finished" | "paid" | "canceled";
 type CalendarView = "month" | "week" | "day" | "agenda";
@@ -77,6 +78,7 @@ type AppointmentLabels = {
   estimatedDuration: string;
   assignedTeam: string;
   address: string;
+  attentionRequired: string;
   payment: string;
   invoice: string;
   communicationStatus: string;
@@ -130,7 +132,9 @@ type AppointmentLabels = {
 const storageKey = "fastclean_appointments";
 const clientsStorageKey = "fastclean_clients";
 const settingsStorageKey = "fastclean_system_settings";
+const teamsStorageKey = "fastclean_teams";
 const appointmentBufferMinutes = 30;
+const defaultCompanyTimezone = "America/New_York";
 const fieldLabelClass = "grid min-w-0 gap-2 text-sm font-medium text-slate-700";
 const selectClass = "h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-cyan-100";
 
@@ -171,6 +175,36 @@ function createMonthDays(monthDate: Date) {
 
 function formatDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function dateKeyInTimezone(date: Date, timeZone: string) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      day: "2-digit",
+      month: "2-digit",
+      timeZone,
+      year: "numeric"
+    }).formatToParts(date);
+    const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+    return `${value("year")}-${value("month")}-${value("day")}`;
+  } catch {
+    return formatDateKey(date);
+  }
+}
+
+function readCompanyTimezone() {
+  if (typeof window === "undefined") {
+    return defaultCompanyTimezone;
+  }
+
+  try {
+    const settings = JSON.parse(window.localStorage.getItem(buildScopedStorageKey(settingsStorageKey)) ?? "{}") as { companyTimezone?: string; timezone?: string };
+    const timeZone = settings.companyTimezone || settings.timezone || defaultCompanyTimezone;
+    Intl.DateTimeFormat(undefined, { timeZone }).format(new Date());
+    return timeZone;
+  } catch {
+    return defaultCompanyTimezone;
+  }
 }
 
 function parseDateKey(value: string) {
@@ -432,6 +466,63 @@ function statusDotClass(status: AppointmentStatus) {
   return "bg-cyan-500";
 }
 
+function isUnresolvedOperationalStatus(status: AppointmentStatus) {
+  const statusKey = normalizedStatus(status);
+  return statusKey === "scheduled" || statusKey === "awaiting_confirmation" || statusKey === "confirmed" || statusKey === "in_progress";
+}
+
+function isHistoricalExceptionStatus(status: AppointmentStatus) {
+  const statusKey = normalizedStatus(status);
+  return statusKey === "cancelled" || statusKey === "no_show";
+}
+
+function appointmentTemporalState(appointment: AppointmentRecord, todayKey: string) {
+  if (appointment.date >= todayKey) {
+    return "current_or_future" as const;
+  }
+
+  if (isUnresolvedOperationalStatus(appointment.status)) {
+    return "past_unresolved" as const;
+  }
+
+  if (isHistoricalExceptionStatus(appointment.status)) {
+    return "past_exception" as const;
+  }
+
+  return "past_closed" as const;
+}
+
+function appointmentTemporalCardClass(appointment: AppointmentRecord, todayKey: string) {
+  const temporalState = appointmentTemporalState(appointment, todayKey);
+
+  if (temporalState === "past_unresolved") {
+    return "bg-amber-50/80 ring-1 ring-amber-200 hover:bg-amber-50";
+  }
+
+  if (temporalState === "past_exception") {
+    return "bg-slate-50 opacity-75 hover:opacity-100 focus:opacity-100";
+  }
+
+  if (temporalState === "past_closed") {
+    return "bg-slate-50 opacity-[0.58] shadow-none hover:opacity-100 focus:opacity-100";
+  }
+
+  return "bg-white";
+}
+
+function appointmentPrimaryTextClass(appointment: AppointmentRecord, todayKey: string) {
+  return appointmentTemporalState(appointment, todayKey) === "past_closed" ? "text-slate-700" : "text-slate-950";
+}
+
+function appointmentSecondaryTextClass(appointment: AppointmentRecord, todayKey: string) {
+  const temporalState = appointmentTemporalState(appointment, todayKey);
+  return temporalState === "past_closed" || temporalState === "past_exception" ? "text-slate-400" : "text-slate-500";
+}
+
+function appointmentNeedsAttention(appointment: AppointmentRecord, todayKey: string) {
+  return appointmentTemporalState(appointment, todayKey) === "past_unresolved";
+}
+
 function recurrenceLabel(recurrence: string, labels: AppointmentLabels) {
   if (recurrence === "weekly") {
     return labels.recurrenceWeekly;
@@ -559,6 +650,7 @@ function AppointmentForm({
   appointments,
   clients,
   labels,
+  teamOptions,
   onOpenNewClient,
   onCancel,
   onCheckIn,
@@ -570,6 +662,7 @@ function AppointmentForm({
   appointments: AppointmentRecord[];
   clients: ClientRecord[];
   labels: AppointmentLabels;
+  teamOptions: string[];
   onOpenNewClient: () => void;
   onCancel: () => void;
   onCheckIn?: () => void;
@@ -587,7 +680,6 @@ function AppointmentForm({
   const [notificationError, setNotificationError] = useState("");
   const liveAppointment = { ...appointment, time: selectedTime, durationMinutes: selectedDurationMinutes };
   const hasConflict = appointmentHasConflict(liveAppointment, appointments);
-  const teamOptions = ["Team A", "Team B", "Team C"];
   const selectedClient = clients.find((client) => client.name === selectedClientName);
   const notificationRows = [
     { key: "appointment", label: labels.appointmentNotice },
@@ -1016,16 +1108,19 @@ function CompactAppointmentCard({
   appointment,
   client,
   labels,
-  onOpen
+  onOpen,
+  todayKey
 }: {
   appointment: AppointmentRecord;
   client?: ClientRecord;
   labels: AppointmentLabels;
   onOpen: () => void;
+  todayKey: string;
 }) {
   const [open, setOpen] = useState(false);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recurrence = appointmentCompactRecurrenceLabel(appointment);
+  const needsAttention = appointmentNeedsAttention(appointment, todayKey);
 
   function openHover() {
     if (hoverTimer.current) {
@@ -1047,7 +1142,7 @@ function CompactAppointmentCard({
     <div className="relative" onMouseEnter={openHover} onMouseLeave={closeHover}>
       <button
         aria-label={`${appointment.client}, ${formatAppointmentTime(appointment.time)}, ${statusLabel(appointment.status, labels)}`}
-        className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-1.5 rounded-md border border-l-4 bg-white px-2 py-1.5 text-left text-[11px] shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 focus:outline-none focus:ring-2 focus:ring-cyan-100 ${statusBorderClass(appointment.status)}`}
+        className={`grid w-full ${needsAttention ? "grid-cols-[auto_auto_minmax(0,1fr)_auto_auto]" : "grid-cols-[auto_minmax(0,1fr)_auto_auto]"} items-center gap-1.5 rounded-md border border-l-4 px-2 py-1.5 text-left text-[11px] shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 focus:outline-none focus:ring-2 focus:ring-cyan-100 ${statusBorderClass(appointment.status)} ${appointmentTemporalCardClass(appointment, todayKey)}`}
         onClick={(event) => {
           event.stopPropagation();
           onOpen();
@@ -1056,8 +1151,9 @@ function CompactAppointmentCard({
         onBlur={closeHover}
         type="button"
       >
-        <span className="font-black text-slate-600">{formatAppointmentTime(appointment.time)}</span>
-        <span className="truncate font-black text-slate-900">{appointment.client}</span>
+        {needsAttention ? <span className="rounded-full bg-amber-100 px-1.5 py-0.5 font-black text-amber-700" title={labels.attentionRequired}>!</span> : null}
+        <span className={`font-black ${appointmentSecondaryTextClass(appointment, todayKey)}`}>{formatAppointmentTime(appointment.time)}</span>
+        <span className={`truncate font-black ${appointmentPrimaryTextClass(appointment, todayKey)}`}>{appointment.client}</span>
         {recurrence ? <span className="rounded bg-slate-100 px-1.5 py-0.5 font-black text-slate-500">{recurrence}</span> : null}
         <span aria-hidden="true" className={`h-2 w-2 rounded-full ${statusDotClass(appointment.status)}`} />
       </button>
@@ -1070,12 +1166,14 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
   const selectedMonth = parseMonth(month);
   const [appointments, setAppointments] = useState<AppointmentRecord[]>(createDefaultAppointments(selectedMonth));
   const [clients, setClients] = useState<ClientRecord[]>(defaultClients);
+  const [teamRecords, setTeamRecords] = useState<TeamRecord[]>(defaultTeams);
   const [calendarView, setCalendarView] = useState<CalendarView>("month");
   const [filters, setFilters] = useState({ search: "", team: "", service: "", status: "", recurrence: "" });
   const [draftAppointment, setDraftAppointment] = useState<AppointmentRecord | null>(null);
   const [pendingRecurringSave, setPendingRecurringSave] = useState<{ originalAppointment: AppointmentRecord; savedAppointment: AppointmentRecord } | null>(null);
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [showClientModal, setShowClientModal] = useState(false);
+  const [companyTimezone, setCompanyTimezone] = useState(defaultCompanyTimezone);
   const monthDays = createMonthDays(selectedMonth);
   const visibleAppointments = expandAppointmentsForMonth(appointments, selectedMonth);
   const clientByName = useMemo(() => new Map(clients.map((client) => [client.name, client])), [clients]);
@@ -1088,16 +1186,21 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
   const monthTitle = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(selectedMonth);
   const weekdayLabels = Array.from({ length: 7 }, (_, index) => new Intl.DateTimeFormat(locale, { weekday: "short" }).format(new Date(2026, 1, index + 1)));
   const nextMonths = [0, 1, 2, 3].map((offset) => addMonths(selectedMonth, offset));
-  const todayKey = formatDateKey(new Date());
+  const todayKey = dateKeyInTimezone(new Date(), companyTimezone);
   const selectedDayForView = selectedDayKey ?? todayKey;
   const selectedDayViewAppointments = filteredAppointments.filter((appointment) => appointment.date === selectedDayForView);
   const weekStart = addDays(parseDateKey(selectedDayForView), -parseDateKey(selectedDayForView).getDay());
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
-  const teams = Array.from(new Set(visibleAppointments.map((appointment) => appointment.team).filter(Boolean))).sort();
+  const teamOptions = useMemo(() => {
+    const savedTeams = teamRecords.map((team) => team.name).filter(Boolean);
+    const appointmentTeams = visibleAppointments.map((appointment) => appointment.team).filter(Boolean);
+    return Array.from(new Set([...savedTeams, ...appointmentTeams])).sort();
+  }, [teamRecords, visibleAppointments]);
+  const teams = teamOptions;
   const services = Array.from(new Set(visibleAppointments.map((appointment) => appointment.service).filter(Boolean))).sort();
   const recurrences = Array.from(new Set(visibleAppointments.map((appointment) => appointment.recurrence).filter((recurrence) => recurrence !== "does_not_repeat"))).sort();
 
-  function nextAvailableTime(date: string, team = "Team A") {
+  function nextAvailableTime(date: string, team = teamOptions[0] || "Team A") {
     const teamAppointments = visibleAppointments
       .filter((appointment) => appointment.date === date && appointment.team === team)
       .sort((first, second) => first.time.localeCompare(second.time));
@@ -1113,13 +1216,17 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
   useEffect(() => {
     const localAppointments = normalizeAppointments(readLocalRecords(storageKey, createDefaultAppointments(selectedMonth)));
     const localClients = readLocalRecords(clientsStorageKey, defaultClients);
+    const localTeams = readLocalRecords(teamsStorageKey, defaultTeams);
     setAppointments(localAppointments);
     setClients(localClients);
+    setTeamRecords(localTeams);
     readRemoteRecords(storageKey, localAppointments).then((records) => setAppointments(normalizeAppointments(records)));
     readRemoteRecords(clientsStorageKey, localClients).then(setClients);
+    readRemoteRecords(teamsStorageKey, localTeams).then(setTeamRecords);
   }, [month]);
 
   useEffect(() => {
+    setCompanyTimezone(readCompanyTimezone());
     const savedView = window.localStorage.getItem("fastclean_appointments_view") as CalendarView | null;
     if (savedView === "month" || savedView === "week" || savedView === "day" || savedView === "agenda") {
       setCalendarView(savedView);
@@ -1135,14 +1242,14 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
     setFilters({ search: "", team: "", service: "", status: "", recurrence: "" });
   }
 
-  function openNewAppointment(date = formatDateKey(new Date())) {
+  function openNewAppointment(date = todayKey) {
     setSelectedDayKey(null);
     setDraftAppointment({
       id: `new_${Date.now()}`,
       date,
       time: nextAvailableTime(date),
       client: "",
-      team: "Team A",
+      team: teamOptions[0] || "Team A",
       service: "Regular Cleaning",
       extraServices: [],
       recurrence: "does_not_repeat",
@@ -1285,7 +1392,7 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
               <h2 className="mt-1 text-2xl font-black capitalize text-slate-950">{monthTitle}</h2>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-600 transition hover:border-cyan-200 hover:bg-cyan-50" href={`/${locale}/appointments?month=${monthKey(new Date())}`}>
+              <Link className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-600 transition hover:border-cyan-200 hover:bg-cyan-50" href={`/${locale}/appointments?month=${monthKey(parseDateKey(todayKey))}`}>
                 {labels.scheduled}
               </Link>
               <Link aria-label={labels.previousMonth} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50" href={`/${locale}/appointments?month=${monthKey(addMonths(selectedMonth, -1))}`}>
@@ -1381,9 +1488,11 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
                 }
 
                 const dayKey = formatDateKey(day);
+                const isPastDay = dayKey < todayKey;
+                const isToday = dayKey === todayKey;
                 return (
                   <div
-                    className="min-h-36 rounded-xl border border-slate-100 bg-slate-50/70 p-2 text-left transition hover:border-cyan-100 hover:bg-cyan-50/30 focus:outline-none focus:ring-4 focus:ring-cyan-100"
+                    className={`min-h-36 rounded-xl border p-2 text-left transition hover:border-cyan-100 hover:bg-cyan-50/30 focus:outline-none focus:ring-4 focus:ring-cyan-100 ${isToday ? "border-green-200 bg-[#31D06C]/10 ring-1 ring-[#31D06C]/20" : isPastDay ? "border-slate-100 bg-slate-50/45" : "border-slate-100 bg-slate-50/70"}`}
                     key={dayKey}
                     onClick={() => setSelectedDayKey(dayKey)}
                     onDoubleClick={() => openNewAppointment(dayKey)}
@@ -1395,10 +1504,16 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
                     role="button"
                     tabIndex={0}
                   >
-                    <p className="text-sm font-black text-slate-700">{day.getDate()}</p>
+                    <p className="text-sm font-black">
+                      {isToday ? (
+                        <span className="grid h-7 w-7 place-items-center rounded-full bg-[#31D06C] text-white shadow-sm">{day.getDate()}</span>
+                      ) : (
+                        <span className={isPastDay ? "text-slate-400" : "text-slate-700"}>{day.getDate()}</span>
+                      )}
+                    </p>
                     <div className="mt-2 grid gap-1.5">
                       {dayAppointments.map((appointment) => (
-                        <CompactAppointmentCard appointment={appointment} client={clientByName.get(appointment.client)} key={appointment.id} labels={labels} onOpen={() => setDraftAppointment(appointment)} />
+                        <CompactAppointmentCard appointment={appointment} client={clientByName.get(appointment.client)} key={appointment.id} labels={labels} onOpen={() => setDraftAppointment(appointment)} todayKey={todayKey} />
                       ))}
                     </div>
                   </div>
@@ -1414,23 +1529,32 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
                 {weekDays.map((day) => {
                   const dayKey = formatDateKey(day);
                   const dayAppointments = filteredAppointments.filter((appointment) => appointment.date === dayKey);
+                  const isPastDay = dayKey < todayKey;
+                  const isToday = dayKey === todayKey;
                   return (
-                    <div className="min-h-96 rounded-xl border border-slate-100 bg-slate-50/70 p-2" key={dayKey}>
-                      <button className="mb-2 w-full rounded-lg px-2 py-1 text-left text-xs font-black uppercase text-slate-500 hover:bg-white" onClick={() => { setSelectedDayKey(dayKey); changeCalendarView("day"); }} type="button">
-                        {new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric" }).format(day)}
+                    <div className={`min-h-96 rounded-xl border p-2 ${isToday ? "border-green-200 bg-[#31D06C]/10 ring-1 ring-[#31D06C]/20" : isPastDay ? "border-slate-100 bg-slate-50/45" : "border-slate-100 bg-slate-50/70"}`} key={dayKey}>
+                      <button className={`mb-2 flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-xs font-black uppercase hover:bg-white ${isPastDay ? "text-slate-400" : "text-slate-500"}`} onClick={() => { setSelectedDayKey(dayKey); changeCalendarView("day"); }} type="button">
+                        {isToday ? <span className="grid h-6 w-6 place-items-center rounded-full bg-[#31D06C] text-white">{day.getDate()}</span> : null}
+                        <span>{new Intl.DateTimeFormat(locale, { weekday: "short", day: isToday ? undefined : "numeric" }).format(day)}</span>
                       </button>
                       <div className="grid gap-2">
-                        {dayAppointments.map((appointment) => (
-                          <button className={`rounded-lg border border-l-4 bg-white p-2 text-left shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 ${statusBorderClass(appointment.status)}`} key={appointment.id} onClick={() => setDraftAppointment(appointment)} type="button">
-                            <p className="text-xs font-black text-slate-500">{formatAppointmentTimeRange(appointment)}</p>
-                            <p className="mt-1 truncate text-sm font-black text-slate-950">{appointment.client}</p>
-                            <p className="truncate text-xs font-bold text-slate-500">{appointment.service} · {appointment.team}</p>
+                        {dayAppointments.map((appointment) => {
+                          const needsAttention = appointmentNeedsAttention(appointment, todayKey);
+                          return (
+                          <button className={`rounded-lg border border-l-4 p-2 text-left shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 ${statusBorderClass(appointment.status)} ${appointmentTemporalCardClass(appointment, todayKey)}`} key={appointment.id} onClick={() => setDraftAppointment(appointment)} type="button">
+                            <p className={`text-xs font-black ${appointmentSecondaryTextClass(appointment, todayKey)}`}>{formatAppointmentTimeRange(appointment)}</p>
+                            <p className={`mt-1 truncate text-sm font-black ${appointmentPrimaryTextClass(appointment, todayKey)}`}>
+                              {needsAttention ? <span className="mr-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700" title={labels.attentionRequired}>!</span> : null}
+                              {appointment.client}
+                            </p>
+                            <p className={`truncate text-xs font-bold ${appointmentSecondaryTextClass(appointment, todayKey)}`}>{appointment.service} · {appointment.team}</p>
                             <div className="mt-2 flex flex-wrap gap-1">
                               <Badge tone={statusTone(appointment.status)}>{statusLabel(appointment.status, labels)}</Badge>
                               {appointmentCompactRecurrenceLabel(appointment) ? <Badge tone="gray">{appointmentCompactRecurrenceLabel(appointment)}</Badge> : null}
                             </div>
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -1448,14 +1572,18 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
               {selectedDayViewAppointments.map((appointment) => {
                 const client = clientByName.get(appointment.client);
                 const address = clientPrimaryAddress(client);
+                const needsAttention = appointmentNeedsAttention(appointment, todayKey);
                 return (
-                  <button className={`rounded-xl border border-l-4 bg-white p-4 text-left shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 ${statusBorderClass(appointment.status)}`} key={appointment.id} onClick={() => setDraftAppointment(appointment)} type="button">
+                  <button className={`rounded-xl border border-l-4 p-4 text-left shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 ${statusBorderClass(appointment.status)} ${appointmentTemporalCardClass(appointment, todayKey)}`} key={appointment.id} onClick={() => setDraftAppointment(appointment)} type="button">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-black text-slate-500">{formatAppointmentTimeRange(appointment)}{appointment.durationMinutes ? ` · ${appointment.durationMinutes / 60}h` : ""}</p>
-                        <h3 className="mt-1 text-base font-black text-slate-950">{appointment.client}</h3>
-                        <p className="mt-1 text-sm font-bold text-slate-500">{appointment.service} · {appointment.team}</p>
-                        {address ? <p className="mt-2 text-sm font-bold text-slate-600">{address}</p> : null}
+                        <p className={`text-xs font-black ${appointmentSecondaryTextClass(appointment, todayKey)}`}>{formatAppointmentTimeRange(appointment)}{appointment.durationMinutes ? ` · ${appointment.durationMinutes / 60}h` : ""}</p>
+                        <h3 className={`mt-1 text-base font-black ${appointmentPrimaryTextClass(appointment, todayKey)}`}>
+                          {needsAttention ? <span className="mr-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700" title={labels.attentionRequired}>!</span> : null}
+                          {appointment.client}
+                        </h3>
+                        <p className={`mt-1 text-sm font-bold ${appointmentSecondaryTextClass(appointment, todayKey)}`}>{appointment.service} · {appointment.team}</p>
+                        {address ? <p className={`mt-2 text-sm font-bold ${appointmentTemporalState(appointment, todayKey) === "past_closed" ? "text-slate-500" : "text-slate-600"}`}>{address}</p> : null}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Badge tone={statusTone(appointment.status)}>{statusLabel(appointment.status, labels)}</Badge>
@@ -1474,16 +1602,20 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
             <div className="grid gap-3">
               {Array.from(new Set(filteredAppointments.map((appointment) => appointment.date))).map((date) => (
                 <section className="grid gap-2" key={date}>
-                  <h3 className="text-xs font-black uppercase tracking-wide text-slate-400">{new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(parseDateKey(date))}</h3>
+                  <h3 className={`text-xs font-black uppercase tracking-wide ${date === todayKey ? "text-green-700" : date < todayKey ? "text-slate-400" : "text-slate-500"}`}>{new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(parseDateKey(date))}</h3>
                   {filteredAppointments.filter((appointment) => appointment.date === date).map((appointment) => {
                     const client = clientByName.get(appointment.client);
                     const address = clientPrimaryAddress(client);
+                    const needsAttention = appointmentNeedsAttention(appointment, todayKey);
                     return (
-                      <button className={`grid gap-3 rounded-xl border border-l-4 bg-white p-3 text-left shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 lg:grid-cols-[7rem_minmax(0,1fr)_auto] lg:items-center ${statusBorderClass(appointment.status)}`} key={appointment.id} onClick={() => setDraftAppointment(appointment)} type="button">
-                        <span className="text-sm font-black text-slate-950">{formatAppointmentTimeRange(appointment)}</span>
+                      <button className={`grid gap-3 rounded-xl border border-l-4 p-3 text-left shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 lg:grid-cols-[7rem_minmax(0,1fr)_auto] lg:items-center ${statusBorderClass(appointment.status)} ${appointmentTemporalCardClass(appointment, todayKey)}`} key={appointment.id} onClick={() => setDraftAppointment(appointment)} type="button">
+                        <span className={`text-sm font-black ${appointmentPrimaryTextClass(appointment, todayKey)}`}>{formatAppointmentTimeRange(appointment)}</span>
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-black text-slate-950">{appointment.client}</span>
-                          <span className="block truncate text-xs font-bold text-slate-500">{appointment.service} · {appointment.team}{address ? ` · ${address}` : ""}</span>
+                          <span className={`block truncate text-sm font-black ${appointmentPrimaryTextClass(appointment, todayKey)}`}>
+                            {needsAttention ? <span className="mr-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700" title={labels.attentionRequired}>!</span> : null}
+                            {appointment.client}
+                          </span>
+                          <span className={`block truncate text-xs font-bold ${appointmentSecondaryTextClass(appointment, todayKey)}`}>{appointment.service} · {appointment.team}{address ? ` · ${address}` : ""}</span>
                         </span>
                         <span className="flex flex-wrap gap-2">
                           <Badge tone={statusTone(appointment.status)}>{statusLabel(appointment.status, labels)}</Badge>
@@ -1518,11 +1650,11 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
             </thead>
             <tbody>
               {visibleAppointments.slice(0, 6).map((appointment) => (
-                <tr className="cursor-pointer transition hover:bg-cyan-50/30" key={appointment.id} onClick={() => setDraftAppointment(appointment)}>
-                  <Td><span className="font-black text-slate-950">{appointment.client}</span></Td>
+                <tr className={`cursor-pointer transition hover:bg-cyan-50/30 ${appointmentTemporalState(appointment, todayKey) === "past_closed" ? "opacity-[0.58] hover:opacity-100" : appointmentTemporalState(appointment, todayKey) === "past_exception" ? "opacity-75 hover:opacity-100" : ""}`} key={appointment.id} onClick={() => setDraftAppointment(appointment)}>
+                  <Td><span className={`font-black ${appointmentPrimaryTextClass(appointment, todayKey)}`}>{appointmentNeedsAttention(appointment, todayKey) ? <span className="mr-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700" title={labels.attentionRequired}>!</span> : null}{appointment.client}</span></Td>
                   <Td>{appointment.team}</Td>
                   <Td>{appointment.service}</Td>
-                  <Td><span className="font-black text-slate-950">{appointmentTimeRange(appointment)}</span></Td>
+                  <Td><span className={`font-black ${appointmentPrimaryTextClass(appointment, todayKey)}`}>{appointmentTimeRange(appointment)}</span></Td>
                   <Td>
                     {recurrenceLabel(appointment.recurrence, labels) ? (
                       <Badge tone={recurrenceTone(appointment.recurrence)}>{recurrenceLabel(appointment.recurrence, labels)}</Badge>
@@ -1554,7 +1686,7 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
             <div className="mt-5 grid gap-3">
               {selectedDayAppointments.map((appointment) => (
                 <button
-                  className={`rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 ${recurrenceBorderClass(appointment.recurrence)}`}
+                  className={`rounded-xl border p-4 text-left shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 ${recurrenceBorderClass(appointment.recurrence)} ${appointmentTemporalCardClass(appointment, todayKey)}`}
                   key={appointment.id}
                   onClick={() => {
                     setDraftAppointment(appointment);
@@ -1564,10 +1696,13 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-black text-slate-950">{appointment.client}</p>
-                      <p className="mt-1 text-xs font-bold text-slate-500">{appointment.service} · {appointment.team}</p>
+                      <p className={`text-sm font-black ${appointmentPrimaryTextClass(appointment, todayKey)}`}>
+                        {appointmentNeedsAttention(appointment, todayKey) ? <span className="mr-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700" title={labels.attentionRequired}>!</span> : null}
+                        {appointment.client}
+                      </p>
+                      <p className={`mt-1 text-xs font-bold ${appointmentSecondaryTextClass(appointment, todayKey)}`}>{appointment.service} · {appointment.team}</p>
                     </div>
-                    <span className="text-sm font-black text-slate-950">{appointment.price}</span>
+                    <span className={`text-sm font-black ${appointmentPrimaryTextClass(appointment, todayKey)}`}>{appointment.price}</span>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <Badge tone="gray">{appointmentTimeRange(appointment)}</Badge>
@@ -1595,6 +1730,7 @@ export function AppointmentsManager({ clientLabels, labels, locale, month }: { c
           appointments={visibleAppointments}
           clients={clients}
           labels={labels}
+          teamOptions={teamOptions}
           onOpenNewClient={() => setShowClientModal(true)}
           onCancel={() => setDraftAppointment(null)}
           onCheckIn={draftAppointment.id.startsWith("new_") ? undefined : () => checkIn(draftAppointment.id)}

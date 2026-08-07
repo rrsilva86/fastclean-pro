@@ -9,7 +9,17 @@ const allowedCollections = new Set([
   "fastclean_appointments",
   "fastclean_employees",
   "fastclean_teams",
+  "fastclean_invoices",
+  "fastclean_system_settings",
+  "fastclean_services",
+  "fastclean_pricing_rules",
+  "fastclean_pricing_quotes",
+  "fastclean_payment_methods",
+  "fastclean_address_memory",
+  "fastclean_backup_settings",
+  "fastclean_backup_history",
   "fastclean_import_history",
+  "fastclean_customer_import_history",
   "fastclean_auth_password_overrides",
   "fastclean_auth_email_overrides"
 ]);

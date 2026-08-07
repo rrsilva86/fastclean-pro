@@ -47,7 +47,7 @@ export const appUserAccounts: AppUserAccount[] = [
     name: "Raisa Silva",
     companyName: "Raisa Cleaning Co.",
     role: "owner",
-    planCode: "professional",
+    planCode: "enterprise",
     isPlatformAdmin: false
   }
 ];

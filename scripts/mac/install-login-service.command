@@ -5,8 +5,14 @@ PLIST="$HOME/Library/LaunchAgents/com.fastcleanpro.local.plist"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOG_DIR="$HOME/Library/Logs/FastCleanPro"
+NODE_BIN="$APP_DIR/.local-tools/node-v24.16.0-darwin-arm64/bin/node"
 
 mkdir -p "$HOME/Library/LaunchAgents" "$LOG_DIR"
+
+PIDS="$(lsof -tiTCP:3000 -sTCP:LISTEN || true)"
+if [ -n "$PIDS" ]; then
+  echo "$PIDS" | xargs kill >/dev/null 2>&1 || true
+fi
 
 cat > "$PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -20,15 +26,13 @@ cat > "$PLIST" <<PLIST
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>/Applications/Codex.app/Contents/Resources:/Users/rafaelsilva/Documents/Codex/2026-05-30/files-mentioned-by-the-user-pasted/work/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>$APP_DIR/.local-tools/node-v24.16.0-darwin-arm64/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>ProgramArguments</key>
   <array>
-    <string>/Applications/Codex.app/Contents/Resources/node</string>
-    <string>$APP_DIR/node_modules/next/dist/bin/next</string>
-    <string>start</string>
-    <string>-p</string>
-    <string>3000</string>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>cd "$APP_DIR" && "$NODE_BIN" "$APP_DIR/node_modules/next/dist/bin/next" start -p 3000</string>
   </array>
   <key>RunAtLoad</key>
   <true/>

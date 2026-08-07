@@ -12,6 +12,12 @@ mkdir -p "$LOG_DIR"
 cd "$APP_DIR"
 
 export PATH="/Applications/Codex.app/Contents/Resources:/Users/rafaelsilva/Documents/Codex/2026-05-30/files-mentioned-by-the-user-pasted/work/bin:$PATH"
+LOCAL_NODE="$APP_DIR/.local-tools/node-v24.16.0-darwin-arm64/bin/node"
+NODE_BIN="$LOCAL_NODE"
+
+if [ ! -x "$NODE_BIN" ]; then
+  NODE_BIN="$(command -v node)"
+fi
 
 if lsof -tiTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   echo "FastClean Pro ja esta aberto em $URL"
@@ -25,7 +31,7 @@ if [ ! -d "node_modules" ]; then
 fi
 
 echo "Iniciando FastClean Pro em $URL"
-node "$SCRIPT_DIR/start-server.js"
+"$NODE_BIN" "$SCRIPT_DIR/start-server.js"
 
 sleep 2
 open "$URL"

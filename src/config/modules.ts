@@ -11,6 +11,7 @@ export const appModules = [
   "payroll",
   "calculator",
   "messages",
+  "proposals",
   "reports",
   "settings",
   "crm",
@@ -84,13 +85,19 @@ export const featureModules: Record<AppModule, FeatureModule> = {
   messages: {
     code: "messages",
     translationKey: "nav.messages",
-    status: "planned",
+    status: "active",
     requiredPermission: "messages.read"
+  },
+  proposals: {
+    code: "proposals",
+    translationKey: "nav.proposals",
+    status: "active",
+    requiredPermission: "estimate.view"
   },
   reports: {
     code: "reports",
     translationKey: "nav.reports",
-    status: "planned",
+    status: "active",
     requiredPermission: "reports.read"
   },
   settings: {
@@ -102,13 +109,13 @@ export const featureModules: Record<AppModule, FeatureModule> = {
   crm: {
     code: "crm",
     translationKey: "nav.crm",
-    status: "planned",
+    status: "active",
     requiredPermission: "crm.read"
   },
   documents: {
     code: "documents",
     translationKey: "nav.documents",
-    status: "planned",
+    status: "active",
     requiredPermission: "documents.read"
   }
 };

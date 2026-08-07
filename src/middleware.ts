@@ -10,7 +10,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (pathname === "/install") {
+  if (pathname === "/install" || pathname.startsWith("/estimate/")) {
     return NextResponse.next();
   }
 
@@ -23,6 +23,7 @@ export function middleware(request: NextRequest) {
   const isInstall = pathname === `/${locale}/install`;
   const isLogin = pathname === `/${locale}/login`;
   const isPublicSalesFlow = pathname === `/${locale}/start`;
+  const isPublicEstimate = pathname.startsWith(`/${locale}/estimate/`);
   const isAdminRoute = pathname === `/${locale}/admin`;
   const isAuthenticated = isKnownSession(request.cookies.get("fastclean_session")?.value);
   const isPlatformAdmin = request.cookies.get("fastclean_platform_admin")?.value === "true";
@@ -32,7 +33,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(request.nextUrl);
   }
 
-  if (!isAuthenticated && !isLogin && !isPublicSalesFlow) {
+  if (!isAuthenticated && !isLogin && !isPublicSalesFlow && !isPublicEstimate) {
     request.nextUrl.pathname = `/${locale}/login`;
     return NextResponse.redirect(request.nextUrl);
   }
